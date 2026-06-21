@@ -1,0 +1,253 @@
+@import "https://fonts.googleapis.cn/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+
+  /* Custom schedule app colors */
+  --color-surface: var(--app-surface);
+  --color-surface-alt: var(--app-surface-alt);
+  --color-text: var(--app-text);
+  --color-text-secondary: var(--app-text-secondary);
+  --color-line: var(--app-line);
+  --color-work: var(--app-work);
+  --color-work-light: var(--app-work-light);
+  --color-life: var(--app-life);
+  --color-life-light: var(--app-life-light);
+  --color-weekend-bg: var(--app-weekend-bg);
+  --color-today-ring: var(--app-today-ring);
+  --color-urgent: var(--app-urgent);
+  --color-important: var(--app-important);
+
+  --color-work-color: var(--work-color);
+  --color-work-bg: var(--work-bg);
+  --color-work-border: var(--work-border);
+  --color-work-dot: var(--work-dot);
+  --color-work-active-bg: var(--work-active-bg);
+  --color-work-active-color: var(--work-active-color);
+  --color-work-active-border: var(--work-active-border);
+  --color-work-sidebar: var(--work-sidebar);
+
+  --color-life-color: var(--life-color);
+  --color-life-bg: var(--life-bg);
+  --color-life-border: var(--life-border);
+  --color-life-dot: var(--life-dot);
+  --color-life-active-bg: var(--life-active-bg);
+  --color-life-active-color: var(--life-active-color);
+  --color-life-active-border: var(--life-active-border);
+  --color-life-sidebar: var(--life-sidebar);
+
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
+
+  --font-sans:
+    'DM Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', ui-sans-serif,
+    system-ui, -apple-system, sans-serif;
+  --font-serif:
+    'Lora', 'Noto Serif SC', 'Songti SC', 'SimSun', Georgia, Cambria,
+    'Times New Roman', Times, serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* ========== Light Mode ========== */
+:root {
+  --radius: 0.4375rem;
+
+  /* shadcn base vars */
+  --background: #F5F3EE;
+  --foreground: #1C1B18;
+  --card: #FFFFFF;
+  --card-foreground: #1C1B18;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1B18;
+  --primary: #1C1B18;
+  --primary-foreground: #F5F3EE;
+  --secondary: #EDEAE3;
+  --secondary-foreground: #1C1B18;
+  --muted: #EDEAE3;
+  --muted-foreground: #7A7568;
+  --accent: #C4553A;
+  --accent-foreground: #FFFFFF;
+  --destructive: #C4553A;
+  --border: #DDD9D0;
+  --input: #DDD9D0;
+  --ring: #C4553A;
+  --chart-1: #C4553A;
+  --chart-2: #2D7D6F;
+  --chart-3: #D4A574;
+  --chart-4: #6B7280;
+  --chart-5: #9CA3AF;
+  --sidebar: #EDEAE3;
+  --sidebar-foreground: #1C1B18;
+  --sidebar-primary: #C4553A;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #EDEAE3;
+  --sidebar-accent-foreground: #1C1B18;
+  --sidebar-border: #DDD9D0;
+  --sidebar-ring: #C4553A;
+
+  /* Schedule app custom vars */
+  --app-surface: #F5F3EE;
+  --app-surface-alt: #FFFFFF;
+  --app-text: #1C1B18;
+  --app-text-secondary: #7A7568;
+  --app-line: #DDD9D0;
+  --app-work: #C4553A;
+  --app-work-light: rgba(196, 85, 58, 0.08);
+  --app-life: #2D7D6F;
+  --app-life-light: rgba(45, 125, 111, 0.08);
+  --app-weekend-bg: #EDEAE3;
+  --app-today-ring: #C4553A;
+  --app-urgent: #C4553A;
+  --app-important: #C4903A;
+
+  /* Category extended vars */
+  --work-color: #C4553A;
+  --work-bg: rgba(196, 85, 58, 0.08);
+  --work-border: rgba(196, 85, 58, 0.2);
+  --work-dot: #C4553A;
+  --work-active-bg: #C4553A;
+  --work-active-color: #FFFFFF;
+  --work-active-border: #C4553A;
+  --work-sidebar: #C4553A;
+
+  --life-color: #2D7D6F;
+  --life-bg: rgba(45, 125, 111, 0.08);
+  --life-border: rgba(45, 125, 111, 0.2);
+  --life-dot: #2D7D6F;
+  --life-active-bg: #2D7D6F;
+  --life-active-color: #FFFFFF;
+  --life-active-border: #2D7D6F;
+  --life-sidebar: #2D7D6F;
+}
+
+/* ========== Dark Mode ========== */
+.dark {
+  --background: #161615;
+  --foreground: #E4E2DD;
+  --card: #1E1E1C;
+  --card-foreground: #E4E2DD;
+  --popover: #1E1E1C;
+  --popover-foreground: #E4E2DD;
+  --primary: #E4E2DD;
+  --primary-foreground: #161615;
+  --secondary: #2A2A26;
+  --secondary-foreground: #E4E2DD;
+  --muted: #2A2A26;
+  --muted-foreground: #8A887E;
+  --accent: #E07A5F;
+  --accent-foreground: #161615;
+  --destructive: #E07A5F;
+  --border: #2E2E2A;
+  --input: #2E2E2A;
+  --ring: #E07A5F;
+  --chart-1: #E07A5F;
+  --chart-2: #3D9B8F;
+  --chart-3: #D4A574;
+  --chart-4: #8A887E;
+  --chart-5: #6B6962;
+  --sidebar: #1E1E1C;
+  --sidebar-foreground: #E4E2DD;
+  --sidebar-primary: #E07A5F;
+  --sidebar-primary-foreground: #161615;
+  --sidebar-accent: #2A2A26;
+  --sidebar-accent-foreground: #E4E2DD;
+  --sidebar-border: #2E2E2A;
+  --sidebar-ring: #E07A5F;
+
+  /* Schedule app custom vars */
+  --app-surface: #161615;
+  --app-surface-alt: #1E1E1C;
+  --app-text: #E4E2DD;
+  --app-text-secondary: #8A887E;
+  --app-line: #2E2E2A;
+  --app-work: #E07A5F;
+  --app-work-light: rgba(224, 122, 95, 0.1);
+  --app-life: #3D9B8F;
+  --app-life-light: rgba(61, 155, 143, 0.1);
+  --app-weekend-bg: #1C1B19;
+  --app-today-ring: #E07A5F;
+  --app-urgent: #E07A5F;
+  --app-important: #D4A03A;
+
+  /* Category extended vars */
+  --work-color: #E07A5F;
+  --work-bg: rgba(224, 122, 95, 0.1);
+  --work-border: rgba(224, 122, 95, 0.2);
+  --work-dot: #E07A5F;
+  --work-active-bg: #E07A5F;
+  --work-active-color: #161615;
+  --work-active-border: #E07A5F;
+  --work-sidebar: #E07A5F;
+
+  --life-color: #3D9B8F;
+  --life-bg: rgba(61, 155, 143, 0.1);
+  --life-border: rgba(61, 155, 143, 0.2);
+  --life-dot: #3D9B8F;
+  --life-active-bg: #3D9B8F;
+  --life-active-color: #161615;
+  --life-active-border: #3D9B8F;
+  --life-sidebar: #3D9B8F;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+body {
+  @apply font-sans;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Serif headings utility */
+.font-heading {
+  font-family: 'Lora', 'Noto Serif SC', 'Songti SC', Georgia, serif;
+}
+
+/* Calendar grid line style */
+.calendar-grid-line {
+  border-color: var(--app-line);
+}
