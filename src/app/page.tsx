@@ -503,7 +503,7 @@ export default function CalendarPage() {
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         console.error('保存日期设置失败', res.status, errJson);
-        alert(`保存日期设置失败 (${res.status})：${errJson.error || '未知错误'}`);
+        alert(`保存日期设置失败 (${res.status})：${errJson.error || '未知错误'}${errJson.detail ? '\n' + errJson.detail : ''}`);
         return;
       }
       // 用服务器返回的最新数据直接更新本地 state,避免额外 GET 请求造成的不一致

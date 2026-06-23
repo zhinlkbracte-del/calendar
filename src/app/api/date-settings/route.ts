@@ -23,7 +23,6 @@ export async function GET(request: NextRequest) {
   const startDate = `${month}-01`;
   const endDate = `${month}-31`;
 
-  // 写操作不传 token，让 getSupabaseClient 优先使用 service_role_key
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('date_settings')
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ data: settings });
 }
 
-// POST /api/date-settings — 设置某日的类型（upsert）
+// POST /api/date-settings — 设置某日的类型（先查再更新或插入，兼容无唯一索引的环境）
 export async function POST(request: NextRequest) {
   const token = getTokenFromRequest(request);
   if (!token) {
@@ -71,26 +70,57 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '无效日类型，必须为 workday 或 restday' }, { status: 400 });
   }
 
-  // 写操作不传 token，让 getSupabaseClient 优先使用 service_role_key
   const client = getSupabaseClient();
-  const { data, error } = await client
-    .from('date_settings')
-    .upsert(
-      { date, day_type, user_id: userId, updated_at: new Date().toISOString() },
-      { onConflict: 'date,user_id' }
-    )
-    .select('id, date, day_type')
-    .single();
 
-  if (error) {
-    console.error('[date-settings POST] upsert failed:', error);
+  try {
+    // 先查是否已存在该日期的设置
+    const { data: existing, error: queryError } = await client
+      .from('date_settings')
+      .select('id')
+      .eq('date', date)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (queryError) {
+      console.error('[date-settings POST] query existing failed:', queryError);
+      return NextResponse.json(
+        { error: '查询失败', detail: queryError.message },
+        { status: 500 }
+      );
+    }
+
+    let result;
+
+    if (existing) {
+      // 已存在 → update
+      const { data, error } = await client
+        .from('date_settings')
+        .update({ day_type, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+        .select('id, date, day_type')
+        .maybeSingle();
+      if (error) throw error;
+      result = data;
+    } else {
+      // 不存在 → insert
+      const { data, error } = await client
+        .from('date_settings')
+        .insert({ date, day_type, user_id: userId, updated_at: new Date().toISOString() })
+        .select('id, date, day_type')
+        .maybeSingle();
+      if (error) throw error;
+      result = data;
+    }
+
+    return NextResponse.json({ data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '未知错误';
+    console.error('[date-settings POST] save failed:', message);
     return NextResponse.json(
-      { error: '保存失败', detail: error.message, code: error.code },
+      { error: '保存失败', detail: message },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({ data });
 }
 
 // DELETE /api/date-settings?date=YYYY-MM-DD — 删除某日设置（恢复默认）
@@ -119,7 +149,8 @@ export async function DELETE(request: NextRequest) {
     .eq('user_id', userId);
 
   if (error) {
-    return NextResponse.json({ error: '删除失败' }, { status: 500 });
+    console.error('[date-settings DELETE] failed:', error);
+    return NextResponse.json({ error: '删除失败', detail: error.message }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });
