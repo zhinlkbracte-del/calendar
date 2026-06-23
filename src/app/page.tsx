@@ -71,7 +71,7 @@ function StatsBar({ category, events, filterPriority, onPriorityClick }: {
       {!isMobile && (
         <span className="text-[11px] text-muted-foreground tabular-nums">{total}</span>
       )}
-      {(['urgent', 'important', 'normal'] as EventPriority[]).map(p => {
+      {(['normal', 'important', 'urgent'] as EventPriority[]).map(p => {
         const pc = PRIORITY_CONFIG[p];
         const active = filterPriority === p;
         return (
@@ -314,17 +314,16 @@ function MobileWeekView({ currentDate, events, filterCategory, filterPriority, e
                     <div className="px-2.5 py-1 space-y-0.5">
                       {dayEvs.map(ev => (
                         <div key={ev.id} onClick={() => openEditEvent(ev)}
-                          className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded-sm px-1 transition-colors hover:bg-accent ${CATEGORY_CONFIG[ev.category].bg} ${
-                            ev.status === 'completed' ? 'opacity-50' : ''
-                          }`}>
+                          className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded-sm px-1 transition-colors hover:bg-accent ${CATEGORY_CONFIG[ev.category].bg}`}>
                           <span className={`w-1.5 self-stretch rounded-sm shrink-0 ${CATEGORY_CONFIG[ev.category].sidebar}`} />
-                          <span className={`text-xs truncate flex-1 ${ev.status === 'completed' ? 'line-through' : ''}`}>
+                          <span className="text-xs truncate flex-1">
                             {ev.title}
                           </span>
                           <PriorityBadge priority={ev.priority} compact />
                           {ev.task_id && (
                             <span className="text-[9px] text-muted-foreground truncate max-w-[60px]">◆ {ev.task_title}</span>
                           )}
+                          {ev.status === 'completed' && <span className="text-[10px] text-primary shrink-0">✓</span>}
                         </div>
                       ))}
                     </div>
@@ -352,7 +351,7 @@ function MobileWeekView({ currentDate, events, filterCategory, filterPriority, e
 
 /* ─── 主组件 ─── */
 export default function CalendarPage() {
-  const { user, getToken, logout } = useAuth();
+  const { user, getToken, logout, loading: authLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isMobile = useIsMobile();
 
@@ -658,6 +657,17 @@ export default function CalendarPage() {
   const showLife = filterCategory === 'all' || filterCategory === 'life';
 
   /* ─── 未登录 ─── */
+  if (authLoading) {
+    return (
+      <div className="h-dvh flex flex-col items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground font-[family-name:var(--font-lora)]">加载中…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) return <AuthPage />;
 
   return (
@@ -810,7 +820,7 @@ export default function CalendarPage() {
 
                     return (
                       <div key={dateStr}
-                        className={`min-h-[80px] p-1.5 cursor-pointer transition-colors hover:bg-accent/50 ${
+                        className={`group min-h-[80px] p-1.5 cursor-pointer transition-colors hover:bg-accent/50 ${
                           today ? 'ring-1 ring-primary/30 shadow-sm' : ''
                         } ${!inMonth ? 'opacity-30 bg-card' : !workday ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-card'}`}
                         onClick={() => openNewEvent(dateStr)}
@@ -818,21 +828,25 @@ export default function CalendarPage() {
                         onMouseUp={handleLongPressEnd}
                         onMouseLeave={() => handleLongPressEnd()}>
                         <div className="flex items-center gap-1 mb-0.5">
-                          <span className={`text-xs tabular-nums font-medium ${
-                            today ? 'bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center' :
+                          <span className={`text-sm tabular-nums font-medium ${
+                            today ? 'bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs' :
                             !workday ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'
                           }`}>{format(d, 'd')}</span>
-                          {!workday && inMonth && <span className="text-[9px] text-amber-600 dark:text-amber-400">休</span>}
+                          {!workday && inMonth && <span className="text-[11px] text-amber-600 dark:text-amber-400">休</span>}
                           {inMonth && monthExtras[dateStr]?.holiday && (
-                            <span className="text-[9px] text-red-500 dark:text-red-400 font-medium truncate">{monthExtras[dateStr].holiday}</span>
+                            <span className="text-[11px] text-red-500 dark:text-red-400 font-medium truncate">{monthExtras[dateStr].holiday}</span>
                           )}
                           {inMonth && !monthExtras[dateStr]?.holiday && monthExtras[dateStr]?.jieqi && (
-                            <span className="text-[9px] text-teal-600 dark:text-teal-400 font-medium truncate">{monthExtras[dateStr].jieqi}</span>
+                            <span className="text-[11px] text-teal-600 dark:text-teal-400 font-medium truncate">{monthExtras[dateStr].jieqi}</span>
                           )}
                           <div className="flex-1" />
                           {dayEvs.length >= 1 && inMonth && (
                             <button onClick={e => { e.stopPropagation(); setSortDialogDate(dateStr); setSortDialogOpen(true); }}
-                              className="text-muted-foreground hover:text-foreground text-[10px] p-0.5 opacity-0 group-hover:opacity-100">☰</button>
+                              className="text-muted-foreground hover:text-foreground text-[10px] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">☰</button>
+                          )}
+                          {inMonth && (
+                            <button onClick={e => { e.stopPropagation(); openNewEvent(dateStr); }}
+                              className="text-muted-foreground hover:text-primary text-[11px] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity font-light">+</button>
                           )}
                         </div>
                         <div className="space-y-px">
@@ -840,13 +854,12 @@ export default function CalendarPage() {
                             <Tooltip key={ev.id}>
                               <TooltipTrigger asChild>
                                 <div onClick={e => { e.stopPropagation(); openEditEvent(ev); }}
-                                  className={`flex items-center gap-1 px-1 py-px rounded-sm text-[11px] cursor-pointer transition-colors hover:bg-accent ${CATEGORY_CONFIG[ev.category].bg} ${
-                                    ev.status === 'completed' ? 'opacity-40 line-through' : ''
-                                  }`}>
+                                  className={`flex items-center gap-1 px-1 py-px rounded-sm text-[11px] cursor-pointer transition-colors hover:bg-accent ${CATEGORY_CONFIG[ev.category].bg}`}>
                                   <span className={`w-1 self-stretch rounded-sm shrink-0 ${CATEGORY_CONFIG[ev.category].sidebar}`} />
                                   <span className="truncate">{ev.title}</span>
                                   <PriorityBadge priority={ev.priority} compact />
                                   {ev.task_id && <span className="text-[9px] text-violet-500 dark:text-violet-400 shrink-0">◆</span>}
+                                  {ev.status === 'completed' && <span className="text-[10px] text-primary shrink-0 ml-auto">✓</span>}
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="text-xs">
@@ -942,30 +955,40 @@ export default function CalendarPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-[11px] text-muted-foreground">类别</Label>
-                  <Select value={formCategory} onValueChange={v => setFormCategory(v as EventCategory)}>
-                    <SelectTrigger className="h-9 mt-0.5"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="work">工作</SelectItem>
-                      <SelectItem value="life">生活</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-1.5 mt-0.5">
+                    {(['work', 'life'] as EventCategory[]).map(c => (
+                      <button key={c} type="button" onClick={() => setFormCategory(c)}
+                        className={`flex-1 py-1.5 rounded-sm text-xs font-medium transition-colors border ${
+                          formCategory === c
+                            ? `${CATEGORY_CONFIG[c].activeBg} ${CATEGORY_CONFIG[c].activeColor} ${CATEGORY_CONFIG[c].activeBorder}`
+                            : 'border-border text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {CATEGORY_CONFIG[c].label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-[11px] text-muted-foreground">状态</Label>
-                  <Select value={formStatus} onValueChange={v => setFormStatus(v as EventStatus)}>
-                    <SelectTrigger className="h-9 mt-0.5"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="not_started">未开始</SelectItem>
-                      <SelectItem value="in_progress">进行中</SelectItem>
-                      <SelectItem value="completed">已完成</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">状态</Label>
+                <div className="flex gap-1.5 mt-0.5">
+                  {(['not_started', 'in_progress', 'completed'] as EventStatus[]).map(s => (
+                    <button key={s} type="button" onClick={() => setFormStatus(s)}
+                      className={`flex-1 py-1.5 rounded-sm text-xs font-medium transition-colors border ${
+                        formStatus === s
+                          ? `${STATUS_CONFIG[s].activeBg} ${STATUS_CONFIG[s].activeColor} ${STATUS_CONFIG[s].activeBorder}`
+                          : 'border-border text-muted-foreground hover:text-foreground'
+                      }`}>
+                      {STATUS_CONFIG[s].label}
+                    </button>
+                  ))}
                 </div>
+              </div>
               </div>
               <div>
                 <Label className="text-[11px] text-muted-foreground">优先级</Label>
                 <div className="flex gap-1.5 mt-0.5">
-                  {(['urgent', 'important', 'normal'] as EventPriority[]).map(p => (
+                  {(['normal', 'important', 'urgent'] as EventPriority[]).map(p => (
                     <button key={p} onClick={() => setFormPriority(p)}
                       className={`flex-1 py-1.5 rounded-sm text-xs font-medium transition-colors border ${
                         formPriority === p

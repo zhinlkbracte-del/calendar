@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { Camera, User, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Camera, User, Lock, Eye, EyeOff, Loader2, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -19,7 +19,7 @@ interface ProfileDialogProps {
 }
 
 export default function ProfileDialog({ open, onClose }: ProfileDialogProps) {
-  const { user, updateProfile, changePassword, refreshUser } = useAuth();
+  const { user, updateProfile, changePassword, refreshUser, logout } = useAuth();
   const [tab, setTab] = useState<'profile' | 'password'>('profile');
   const [nickname, setNickname] = useState(user?.nickname || '');
   const [saving, setSaving] = useState(false);
@@ -154,13 +154,13 @@ export default function ProfileDialog({ open, onClose }: ProfileDialogProps) {
           <div className="flex gap-1 bg-muted/50 rounded-lg p-1 mb-4">
             <button
               onClick={() => { setTab('profile'); setMessage(null); }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${tab === 'profile' ? 'bg-zinc-700 text-foreground' : 'text-muted-foreground hover:text-muted-foreground'}`}
+              className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${tab === 'profile' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-muted-foreground'}`}
             >
               资料编辑
             </button>
             <button
               onClick={() => { setTab('password'); setMessage(null); }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${tab === 'password' ? 'bg-zinc-700 text-foreground' : 'text-muted-foreground hover:text-muted-foreground'}`}
+              className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${tab === 'password' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-muted-foreground'}`}
             >
               修改密码
             </button>
@@ -290,6 +290,17 @@ export default function ProfileDialog({ open, onClose }: ProfileDialogProps) {
               </Button>
             </div>
           )}
+
+          {/* Logout button */}
+          <div className="pt-3 mt-2 border-t border-border/60">
+            <Button
+              variant="outline"
+              onClick={() => { onClose(); logout(); }}
+              className="w-full border-border/60 text-muted-foreground hover:text-red-500 hover:border-red-500/40 hover:bg-red-500/5 transition-colors">
+              <LogOut className="w-4 h-4 mr-2" />
+              退出登录
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

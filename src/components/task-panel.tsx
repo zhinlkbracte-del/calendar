@@ -354,16 +354,18 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">状态</label>
-                <Select value={formStatus} onValueChange={v => setFormStatus(v as TaskStatus)}>
-                  <SelectTrigger className="bg-muted border-border text-foreground">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-muted border-border">
-                    {Object.entries(TASK_STATUS_CONFIG).map(([k, v]) => (
-                      <SelectItem key={k} value={k} className="text-foreground focus:bg-muted">{v.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1.5">
+                  {(['not_started', 'in_progress', 'completed'] as TaskStatus[]).map(s => (
+                    <button key={s} type="button" onClick={() => setFormStatus(s)}
+                      className={`flex-1 py-1.5 rounded-sm text-xs font-medium transition-colors border ${
+                        formStatus === s
+                          ? `${TASK_STATUS_CONFIG[s].activeBg} ${TASK_STATUS_CONFIG[s].activeColor} ${TASK_STATUS_CONFIG[s].activeBorder}`
+                          : 'border-border text-muted-foreground hover:text-foreground'
+                      }`}>
+                      {TASK_STATUS_CONFIG[s].label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
