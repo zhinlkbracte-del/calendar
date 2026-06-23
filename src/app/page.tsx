@@ -361,6 +361,34 @@ export default function CalendarPage() {
   const [filterCategory, setFilterCategory] = useState<FilterCategory>('all');
   const [filterPriority, setFilterPriority] = useState<EventPriority | null>(null);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const calendarGridRef = useRef<HTMLDivElement>(null);
+  const [gridShowCount, setGridShowCount] = useState(2);
+
+  // 动态计算PC日历每格可显示的事项数量
+  useEffect(() => {
+    if (isMobile) return;
+    const el = calendarGridRef.current;
+    if (!el) return;
+    const calc = () => {
+      // 等下一帧，确保 1fr 行高已计算
+      requestAnimationFrame(() => {
+        const rows = el.children.length / 7 || 6;
+        if (rows === 0) return;
+        const gridHeight = el.clientHeight;
+        const rowHeight = gridHeight / rows;
+        const headerHeight = 28; // 日期头部 (数字+节气)
+        const eventItemHeight = 22; // 每条事项高度
+        const paddingY = 12; // p-1.5 = 6px * 2
+        const availableForEvents = rowHeight - headerHeight - paddingY - 6; // 6px 余量
+        const count = Math.max(1, Math.floor(availableForEvents / eventItemHeight));
+        setGridShowCount(count);
+      });
+    };
+    const observer = new ResizeObserver(calc);
+    observer.observe(el);
+    calc();
+    return () => observer.disconnect();
+  }, [isMobile, currentDate]);
 
   // 事项弹窗
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -756,7 +784,7 @@ export default function CalendarPage() {
         {activeModule === 'tasks' ? (
           <TaskPanel onTasksChange={fetchAvailableTasks} />
         ) : (
-          <div className="flex-1 flex flex-col min-h-0 max-w-[1600px] w-full mx-auto">
+          <div className="flex-1 flex flex-col min-h-0 max-w-[1900px] w-full mx-auto">
             {/* 月份导航 + 统计 */}
             <div className="shrink-0 px-3 pt-3 pb-1">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -835,7 +863,7 @@ export default function CalendarPage() {
                 isWorkday={isWorkday} handleLongPressStart={handleLongPressStart} handleLongPressEnd={handleLongPressEnd} longPressDateRef={longPressDateRef} monthExtras={monthExtras} />
             ) : (
               /* PC 月历 */
-              <div className="flex-1 overflow-y-auto min-h-0 px-3 pb-3">
+              <div className="flex-1 flex flex-col min-h-0 px-3 pb-3">
                 {/* 星期头 */}
                 <div className="grid grid-cols-7 border-b border-border mb-0.5">
                   {weekDays.map((w, i) => (
@@ -843,7 +871,7 @@ export default function CalendarPage() {
                   ))}
                 </div>
                 {/* 日期格子 */}
-                <div className="grid grid-cols-7 gap-px bg-border">
+                <div ref={calendarGridRef} className="grid grid-cols-7 gap-px bg-border flex-1 min-h-0" style={{ gridTemplateRows: `repeat(${calendarDays.length / 7}, 1fr)` }}>
                   {calendarDays.map(d => {
                     const dateStr = format(d, 'yyyy-MM-dd');
                     const inMonth = isSameMonth(d, currentDate);
@@ -851,13 +879,12 @@ export default function CalendarPage() {
                     const today = isToday(d);
                     const dayEvs = filteredEvents.filter(e => e.date === dateStr).sort((a, b) => (a.sort_order || '').localeCompare(b.sort_order || ''));
                     const isExpanded = expandedDates.has(dateStr);
-                    const showCount = 2;
-                    const visibleEvs = isExpanded ? dayEvs : dayEvs.slice(0, showCount);
-                    const hiddenCount = dayEvs.length - showCount;
+                    const visibleEvs = isExpanded ? dayEvs : dayEvs.slice(0, gridShowCount);
+                    const hiddenCount = dayEvs.length - gridShowCount;
 
                     return (
                       <div key={dateStr}
-                        className={`group min-h-[80px] p-1.5 cursor-pointer transition-colors hover:bg-accent/50 ${
+                        className={`group p-1.5 cursor-pointer transition-colors hover:bg-accent/50 ${
                           today ? 'ring-1 ring-primary/30 shadow-sm' : ''
                         } ${!inMonth ? 'opacity-30 bg-card' : !workday ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-card'}`}
                         onClick={() => openNewEvent(dateStr)}
