@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
   const startDate = `${month}-01`;
   const endDate = `${month}-31`;
 
+  // 写操作不传 token，让 getSupabaseClient 优先使用 service_role_key
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('date_settings')
@@ -32,7 +33,11 @@ export async function GET(request: NextRequest) {
     .lte('date', endDate);
 
   if (error) {
-    return NextResponse.json({ error: '查询失败' }, { status: 500 });
+    console.error('[date-settings GET] query failed:', error);
+    return NextResponse.json(
+      { error: '查询失败', detail: error.message, code: error.code },
+      { status: 500 }
+    );
   }
 
   // 返回为 { "YYYY-MM-DD": "workday"|"restday" } 映射
@@ -66,6 +71,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '无效日类型，必须为 workday 或 restday' }, { status: 400 });
   }
 
+  // 写操作不传 token，让 getSupabaseClient 优先使用 service_role_key
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('date_settings')
@@ -77,7 +83,11 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: '保存失败' }, { status: 500 });
+    console.error('[date-settings POST] upsert failed:', error);
+    return NextResponse.json(
+      { error: '保存失败', detail: error.message, code: error.code },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ data });

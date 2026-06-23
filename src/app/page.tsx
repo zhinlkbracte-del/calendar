@@ -494,21 +494,58 @@ export default function CalendarPage() {
   }, []);
 
   const saveDateSetting = async () => {
-    await fetch('/api/date-settings', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ date: dateSettingDate, day_type: dateSettingType }),
-    });
+    try {
+      const res = await fetch('/api/date-settings', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ date: dateSettingDate, day_type: dateSettingType }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.error('保存日期设置失败', res.status, errJson);
+        alert(`保存日期设置失败 (${res.status})：${errJson.error || '未知错误'}`);
+        return;
+      }
+      // 用服务器返回的最新数据直接更新本地 state,避免额外 GET 请求造成的不一致
+      const json = await res.json();
+      if (json.data?.date && json.data?.day_type) {
+        setDateSettings((prev) => ({ ...prev, [json.data.date]: json.data.day_type }));
+      } else {
+        await fetchDateSettings();
+      }
+    } catch (e) {
+      console.error('保存日期设置异常', e);
+      alert(`保存日期设置异常：${(e as Error).message}`);
+      return;
+    }
     setDateSettingDialogOpen(false);
-    fetchDateSettings();
   };
 
   const deleteDateSetting = async () => {
-    await fetch(`/api/date-settings?date=${dateSettingDate}`, {
-      method: 'DELETE', credentials: 'include', headers: { ...getAuthHeaders() },
-    });
+    try {
+      const res = await fetch(`/api/date-settings?date=${dateSettingDate}`, {
+        method: 'DELETE', credentials: 'include', headers: { ...getAuthHeaders() },
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.error('删除日期设置失败', res.status, errJson);
+        alert(`删除日期设置失败 (${res.status})：${errJson.error || '未知错误'}`);
+        return;
+      }
+      // 直接从本地 state 中移除该日期,避免额外 GET
+      if (dateSettingDate) {
+        setDateSettings((prev) => {
+          const next = { ...prev };
+          delete next[dateSettingDate];
+          return next;
+        });
+      }
+    } catch (e) {
+      console.error('删除日期设置异常', e);
+      alert(`删除日期设置异常：${(e as Error).message}`);
+      return;
+    }
     setDateSettingDialogOpen(false);
-    fetchDateSettings();
   };
 
   /* ─── 事项操作 ─── */
