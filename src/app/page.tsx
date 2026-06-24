@@ -736,20 +736,12 @@ export default function CalendarPage() {
     }
   };
 
-  const handleDownloadTemplate = async () => {
-    try {
-      const res = await fetch('/api/events/template');
-      if (!res.ok) throw new Error('下载模板失败');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'events_template.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '下载模板失败');
-    }
+  const handleDownloadTemplate = () => {
+    // 直接下载静态模板文件，无需API调用
+    const a = document.createElement('a');
+    a.href = '/template.xlsx';
+    a.download = 'events_template.xlsx';
+    a.click();
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
