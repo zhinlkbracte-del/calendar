@@ -94,6 +94,7 @@
 | status | varchar(20) | not_started / in_progress / completed |
 | priority | varchar(20) | urgent / important / normal (默认normal) |
 | sort_order | varchar(50) | 同日排序顺序(可选) |
+| duration | varchar(10) | 消耗时长(小时,可选) |
 | user_id | varchar(36) | 所属用户ID(可选,兼容旧数据) |
 | created_at | timestamptz | 创建时间 |
 | updated_at | timestamptz | 更新时间 |

@@ -147,8 +147,18 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
   const sortedTasks = [...tasks].sort((a, b) => {
     const si = statusOrder.indexOf(a.status), sb = statusOrder.indexOf(b.status);
     if (si !== sb) return si - sb;
-    const da = a.planned_end_date || '9999-12-31', db = b.planned_end_date || '9999-12-31';
-    return da.localeCompare(db);
+    // Non-completed: by planned_end_date ascending
+    if (a.status !== 'completed') {
+      const da = a.planned_end_date || '9999-12-31', db = b.planned_end_date || '9999-12-31';
+      return da.localeCompare(db);
+    }
+    // Completed: actual_end_date desc → planned_end_date desc → planned_start_date desc
+    const aeA = a.actual_end_date || '', aeB = b.actual_end_date || '';
+    if (aeA !== aeB) return aeB.localeCompare(aeA);
+    const peA = a.planned_end_date || '', peB = b.planned_end_date || '';
+    if (peA !== peB) return peB.localeCompare(peA);
+    const psA = a.start_date || '', psB = b.start_date || '';
+    return psB.localeCompare(psA);
   });
 
   const inProgressTasks = sortedTasks.filter(t => t.status === 'in_progress');
@@ -162,7 +172,7 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
     const delayCfg = TASK_DELAY_CONFIG[task.delay_status];
 
     return (
-      <div key={task.id} className={`rounded border ${task.status === 'completed' ? 'border-border/40 opacity-60' : 'border-border/50'} bg-card/60 overflow-hidden`}>
+      <div key={task.id} className={`rounded border border-border/50 bg-card/60 overflow-hidden`}>
         {/* Task header */}
         <div className="p-3 sm:p-4">
           <div className="flex items-start justify-between gap-2">
@@ -180,10 +190,10 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
                   </span>
                 )}
               </div>
-              <h3 className={`mt-1.5 font-medium text-sm sm:text-base ${task.status === 'completed' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+              <h3 className={`mt-1.5 font-medium text-sm sm:text-base text-foreground`}>
                 {task.title}
               </h3>
-              {(task.start_date || task.planned_end_date) && (
+              {((task.start_date || task.planned_end_date) || (taskEvents[task.id]?.some(ev => ev.duration))) && (
                 <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
                   {task.start_date && (
                     <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{task.start_date}</span>
@@ -194,6 +204,13 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
                   {task.actual_end_date && (
                     <span className="flex items-center gap-1 text-green-500">完成于 {task.actual_end_date}</span>
                   )}
+                  {(() => {
+                    const evts = taskEvents[task.id] || [];
+                    const total = evts.reduce((sum, ev) => sum + (parseFloat(ev.duration || '0') || 0), 0);
+                    return total > 0 ? (
+                      <span className="flex items-center gap-1 font-medium text-foreground/70"><Clock className="w-3 h-3" />累计 {total % 1 === 0 ? total : total.toFixed(1)}h</span>
+                    ) : null;
+                  })()}
                 </div>
               )}
               {task.latest_progress && (
@@ -258,6 +275,7 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
                     <div key={ev.id} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-sm bg-card/60">
                       <span className={`w-1.5 h-1.5 rounded-full ${catCfg.dot}`} />
                       <span className="text-muted-foreground flex-1 truncate">{ev.title}</span>
+                      {ev.duration && <span className="text-muted-foreground text-[10px] font-medium">{ev.duration}h</span>}
                       <span className={priCfg.color}>{priCfg.icon}</span>
                       <span className={`${stCfg.color} text-[10px]`}>{stCfg.label}</span>
                       <span className="text-muted-foreground text-[10px]">{ev.date}</span>
@@ -354,16 +372,18 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">状态</label>
-                <Select value={formStatus} onValueChange={v => setFormStatus(v as TaskStatus)}>
-                  <SelectTrigger className="bg-muted border-border text-foreground">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-muted border-border">
-                    {Object.entries(TASK_STATUS_CONFIG).map(([k, v]) => (
-                      <SelectItem key={k} value={k} className="text-foreground focus:bg-muted">{v.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1.5">
+                  {(['not_started', 'in_progress', 'completed'] as TaskStatus[]).map(s => (
+                    <button key={s} type="button" onClick={() => setFormStatus(s)}
+                      className={`flex-1 py-1.5 rounded-sm text-xs font-medium transition-colors border ${
+                        formStatus === s
+                          ? `${TASK_STATUS_CONFIG[s].activeBg} ${TASK_STATUS_CONFIG[s].activeColor} ${TASK_STATUS_CONFIG[s].activeBorder}`
+                          : 'border-border text-muted-foreground hover:text-foreground'
+                      }`}>
+                      {TASK_STATUS_CONFIG[s].label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

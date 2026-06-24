@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as XLSX from 'xlsx';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { verifyToken, getTokenFromRequest } from '@/lib/auth';
 
@@ -66,6 +65,8 @@ export async function POST(request: NextRequest) {
     }
 
     const buf = await file.arrayBuffer();
+    // 动态导入xlsx，避免生产环境打包问题
+    const XLSX = await import('xlsx');
     // 不使用 cellDates，日期单元格保持为数字序列号，由 parseExcelDate 统一处理
     const wb = XLSX.read(buf, { type: 'array' });
     const wsName = wb.SheetNames[0];

@@ -9,6 +9,7 @@ export interface EventItem {
   sort_order: string | null;
   task_id: string | null;
   task_title?: string;
+  duration: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -53,21 +54,33 @@ export const CATEGORY_CONFIG: Record<EventCategory, {
   },
 };
 
-export const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bg: string }> = {
+export const STATUS_CONFIG: Record<EventStatus, { label: string; color: string; bg: string; activeBg: string; activeColor: string; activeBorder: string; icon: string }> = {
   not_started: {
     label: '未开始',
     color: 'text-muted-foreground',
     bg: 'bg-muted/50',
+    activeBg: 'bg-foreground/10',
+    activeColor: 'text-foreground',
+    activeBorder: 'border-foreground/40',
+    icon: '○',
   },
   in_progress: {
     label: '进行中',
     color: 'text-amber-500',
     bg: 'bg-amber-500/10',
+    activeBg: 'bg-amber-500/20',
+    activeColor: 'text-amber-700 dark:text-amber-300',
+    activeBorder: 'border-amber-500/50',
+    icon: '◐',
   },
   completed: {
     label: '已完成',
     color: 'text-green-600 dark:text-green-400',
     bg: 'bg-green-500/10',
+    activeBg: 'bg-green-500/20',
+    activeColor: 'text-green-700 dark:text-green-300',
+    activeBorder: 'border-green-500/50',
+    icon: '●',
   },
 };
 
@@ -98,9 +111,9 @@ export const PRIORITY_CONFIG: Record<EventPriority, { label: string; color: stri
     bg: 'bg-muted/30',
     border: 'border-border',
     icon: '⚪',
-    activeBg: 'bg-muted/50',
+    activeBg: 'bg-foreground/10',
     activeColor: 'text-foreground',
-    activeBorder: 'border-border',
+    activeBorder: 'border-foreground/40',
   },
 };
 
@@ -125,23 +138,7 @@ export interface TaskItem {
   events?: EventItem[];
 }
 
-export const TASK_STATUS_CONFIG: Record<TaskStatus, { label: string; color: string; bg: string }> = {
-  not_started: {
-    label: '未开始',
-    color: 'text-muted-foreground',
-    bg: 'bg-muted/50',
-  },
-  in_progress: {
-    label: '进行中',
-    color: 'text-amber-500',
-    bg: 'bg-amber-500/10',
-  },
-  completed: {
-    label: '已完成',
-    color: 'text-green-600 dark:text-green-400',
-    bg: 'bg-green-500/10',
-  },
-};
+export const TASK_STATUS_CONFIG = STATUS_CONFIG;
 
 export const TASK_DELAY_CONFIG: Record<TaskDelayStatus, { label: string; color: string; bg: string }> = {
   normal: {
