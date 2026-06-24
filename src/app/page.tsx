@@ -730,7 +730,8 @@ export default function CalendarPage() {
       const match = disposition.match(/filename="?([^"]+)"?/);
       a.download = match ? match[1] : 'events_export.xlsx';
       a.click();
-      URL.revokeObjectURL(url);
+      // 延时释放，避免Chrome下载管理器还没读完blob数据就回收了URL
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (err) {
       alert(err instanceof Error ? err.message : '导出失败');
     }
