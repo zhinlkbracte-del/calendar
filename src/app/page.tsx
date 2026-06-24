@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import type { EventItem, EventCategory, EventStatus, EventPriority, FilterCategory, TaskItem } from '@/lib/types';
 import { CATEGORY_CONFIG, STATUS_CONFIG, PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '@/lib/types';
-import { getMonthExtras, type DayExtra } from '@/lib/holidays';
+import { getMonthExtras, getDayTheme, type DayExtra } from '@/lib/holidays';
+import { getDayImage } from '@/lib/day-svg';
 import { useAuth } from '@/lib/auth-context';
 import AuthPage from '@/components/auth-page';
 import ProfileDialog from '@/components/profile-dialog';
@@ -92,7 +93,83 @@ function StatsBar({ category, events, filterPriority, onPriorityClick }: {
   );
 }
 
-/* ─── 排序弹窗 ─── */
+/* ─── 日期事项列表弹窗 (PC) ─── */
+function DateEventsDialog({ open, onClose, date, events, onReorder, onAdd, onEditEvent }: {
+  open: boolean; onClose: () => void; date: string;
+  events: EventItem[]; onReorder: () => void;
+  onAdd: () => void; onEditEvent: (ev: EventItem) => void;
+}) {
+  const [items, setItems] = useState(events);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const { getToken } = useAuth();
+
+  useEffect(() => { setItems(events); }, [events]);
+
+  const handleDragStart = (i: number) => setDragIdx(i);
+  const handleDragOver = (e: React.DragEvent, i: number) => {
+    e.preventDefault();
+    if (dragIdx === null || dragIdx === i) return;
+    const next = [...items];
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(i, 0, moved);
+    setItems(next);
+    setDragIdx(i);
+  };
+  const handleDragEnd = async () => {
+    const prevIdx = dragIdx;
+    setDragIdx(null);
+    if (prevIdx === null) return;
+    // Auto-save on drop
+    setSaving(true);
+    const token = getToken();
+    await fetch('/api/events/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      credentials: 'include',
+      body: JSON.stringify({ orders: items.map((it, i) => ({ id: it.id, sort_order: String(i) })) }),
+    });
+    onReorder();
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-[400px]">
+        <DialogHeader>
+          <DialogTitle>{date} 事项</DialogTitle>
+          <DialogDescription>{items.length} 个事项{saving ? ' · 保存中…' : ''}</DialogDescription>
+        </DialogHeader>
+        {items.length === 0 ? (
+          <div className="py-8 text-center text-muted-foreground text-sm">暂无事项</div>
+        ) : (
+          <div className="space-y-1.5 max-h-[60vh] overflow-y-auto">
+            {items.map((ev, i) => (
+              <div key={ev.id} draggable onDragStart={() => handleDragStart(i)}
+                onDragOver={e => handleDragOver(e, i)} onDragEnd={handleDragEnd}
+                className={`flex items-center gap-2 p-2 rounded-sm border transition-colors ${
+                  dragIdx === i ? 'border-primary/50 bg-primary/5' : 'border-border bg-card'
+                }`}>
+                <span className="text-muted-foreground cursor-grab active:cursor-grabbing text-xs select-none">☰</span>
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${CATEGORY_CONFIG[ev.category].dot}`} />
+                <span className="text-sm truncate flex-1 cursor-pointer" onClick={() => onEditEvent(ev)}>
+                  {ev.title}{ev.duration ? <span className="text-muted-foreground ml-1">{ev.duration}h</span> : null}
+                </span>
+                <PriorityBadge priority={ev.priority} compact />
+                {ev.status === 'completed' && <span className="text-[10px] text-primary shrink-0">✓</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        <Button variant="outline" onClick={onAdd} className="w-full gap-1">
+          <span className="text-base leading-none">+</span> 添加事项
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── 排序弹窗 (移动端) ─── */
 function SortDialog({ open, onClose, date, events, onReorder }: {
   open: boolean; onClose: () => void; date: string;
   events: EventItem[]; onReorder: () => void;
@@ -143,7 +220,7 @@ function SortDialog({ open, onClose, date, events, onReorder }: {
               }`}>
               <span className="text-muted-foreground text-xs">☰</span>
               <span className={`w-1.5 h-1.5 rounded-full ${CATEGORY_CONFIG[ev.category].dot}`} />
-              <span className="text-sm truncate flex-1">{ev.title}</span>
+              <span className="text-sm truncate flex-1">{ev.title}{ev.duration ? <span className="text-muted-foreground ml-1">{ev.duration}h</span> : null}</span>
               <PriorityBadge priority={ev.priority} compact />
             </div>
           ))}
@@ -276,18 +353,25 @@ function MobileWeekView({ currentDate, events, filterCategory, filterPriority, e
               const workday = isWorkday(d);
               const dayEvs = filtered(events.filter(e => e.date === dateStr)).sort((a, b) => (a.sort_order || '').localeCompare(b.sort_order || ''));
 
+              const mobileExtra: DayExtra | undefined = (monthExtras as Record<string, DayExtra>)?.[dateStr];
+              const mobileTheme = getDayTheme(mobileExtra?.jieqi, mobileExtra?.holiday);
+              const mobileImg = getDayImage(mobileExtra?.jieqi, mobileExtra?.holiday);
               return (
                 <div key={dateStr}
-                  className={`mb-1.5 rounded border ${
+                  className={`relative mb-1.5 rounded border overflow-hidden ${
                     isToday(d)
                       ? 'border-primary shadow-sm ring-1 ring-primary/20'
                       : 'border-border'
                   } ${!workday ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-800/30' : 'bg-card'}`}
+                  style={mobileTheme ? { backgroundImage: mobileTheme } : undefined}
                   onTouchStart={() => handleLongPressStart(dateStr)}
                   onTouchEnd={handleLongPressEnd}
                   onTouchCancel={handleLongPressEnd}
                   onContextMenu={e => e.preventDefault()}>
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-border cursor-pointer hover:bg-accent/50 transition-colors"
+                  {mobileImg && (
+                    <img src={mobileImg} alt="" className="absolute inset-0 m-auto w-24 h-24 opacity-30 dark:opacity-50 pointer-events-none select-none object-contain mix-blend-multiply" />
+                  )}
+                  <div className="relative flex items-center gap-2 px-2.5 py-1.5 border-b border-border cursor-pointer hover:bg-accent/50 transition-colors"
                        onClick={() => openNewEvent(dateStr)}>
                     <span className={`text-sm font-semibold tabular-nums ${
                       isToday(d) ? 'bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs' : 'text-foreground'
@@ -311,13 +395,13 @@ function MobileWeekView({ currentDate, events, filterCategory, filterPriority, e
                     <span className="text-primary/50 text-base font-light leading-none">+</span>
                   </div>
                   {dayEvs.length > 0 && (
-                    <div className="px-2.5 py-1 space-y-0.5">
+                    <div className="relative px-2.5 py-1 space-y-0.5">
                       {dayEvs.map(ev => (
                         <div key={ev.id} onClick={() => openEditEvent(ev)}
                           className={`flex items-center gap-1.5 py-0.5 cursor-pointer group rounded-sm px-1 transition-colors hover:bg-accent ${CATEGORY_CONFIG[ev.category].bg}`}>
                           <span className={`w-1.5 self-stretch rounded-sm shrink-0 ${CATEGORY_CONFIG[ev.category].sidebar}`} />
                           <span className="text-xs truncate flex-1">
-                            {ev.title}
+                            {ev.title}{ev.duration ? <span className="text-muted-foreground ml-0.5">{ev.duration}h</span> : null}
                           </span>
                           <PriorityBadge priority={ev.priority} compact />
                           {ev.task_id && (
@@ -370,25 +454,32 @@ export default function CalendarPage() {
     const el = calendarGridRef.current;
     if (!el) return;
     const calc = () => {
-      // 等下一帧，确保 1fr 行高已计算
       requestAnimationFrame(() => {
-        const rows = el.children.length / 7 || 6;
-        if (rows === 0) return;
-        const gridHeight = el.clientHeight;
-        const rowHeight = gridHeight / rows;
-        const headerHeight = 28; // 日期头部 (数字+节气)
-        const eventItemHeight = 22; // 每条事项高度
-        const paddingY = 12; // p-1.5 = 6px * 2
-        const availableForEvents = rowHeight - headerHeight - paddingY - 6; // 6px 余量
-        const count = Math.max(1, Math.floor(availableForEvents / eventItemHeight));
-        setGridShowCount(count);
+        // 找到第一个可见的日期格子来测量
+        const firstCell = el.querySelector('[data-date-cell]') as HTMLElement;
+        if (!firstCell) return;
+        const cellHeight = firstCell.clientHeight;
+        // 测量头部实际高度（日期数字行）
+        const header = firstCell.querySelector('[data-date-header]') as HTMLElement;
+        const headerHeight = header ? header.offsetHeight + 2 : 24; // +2 for mb-0.5
+        // 测量单条事项的实际高度
+        const firstEvent = firstCell.querySelector('[data-event-item]') as HTMLElement;
+        const eventItemHeight = firstEvent ? firstEvent.offsetHeight + 1 : 20; // +1 for space-y-px gap
+        // 格子padding: p-1.5 = 6px * 2
+        const paddingY = 12;
+        const availableForEvents = cellHeight - headerHeight - paddingY - 18; // 18px: +N按钮高度(~14px)+余量(4px)
+        // 先按不显示+N按钮来算可显示数量
+        const countWithoutFold = Math.max(1, Math.floor((cellHeight - headerHeight - paddingY - 4) / eventItemHeight));
+        // 如果需要折叠，要留出+N按钮的空间
+        const countWithFold = Math.max(1, Math.floor(availableForEvents / eventItemHeight));
+        setGridShowCount(countWithoutFold > countWithFold ? countWithFold : countWithoutFold);
       });
     };
     const observer = new ResizeObserver(calc);
     observer.observe(el);
     calc();
     return () => observer.disconnect();
-  }, [isMobile, currentDate]);
+  }, [isMobile, currentDate, events.length]);
 
   // 事项弹窗
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -400,10 +491,15 @@ export default function CalendarPage() {
   const [formStatus, setFormStatus] = useState<EventStatus>('not_started');
   const [formPriority, setFormPriority] = useState<EventPriority>('normal');
   const [formTaskId, setFormTaskId] = useState<string | null>(null);
+  const [formDuration, setFormDuration] = useState('');
 
   // 排序弹窗
   const [sortDialogDate, setSortDialogDate] = useState('');
   const [sortDialogOpen, setSortDialogOpen] = useState(false);
+
+  // 日期事项列表弹窗 (PC)
+  const [dateListDate, setDateListDate] = useState('');
+  const [dateListOpen, setDateListOpen] = useState(false);
 
   // 可用任务 & 最近选择
   const [availableTasks, setAvailableTasks] = useState<TaskItem[]>([]);
@@ -583,7 +679,7 @@ export default function CalendarPage() {
     setFormTitle(''); setFormDescription(''); setFormDate(dateStr);
     setFormCategory(filterCategory === 'life' ? 'life' : 'work');
     setFormStatus('not_started'); setFormPriority('normal');
-    setFormTaskId(null);
+    setFormTaskId(null); setFormDuration('');
     setDialogOpen(true);
   };
 
@@ -591,14 +687,14 @@ export default function CalendarPage() {
     setEditingEvent(ev);
     setFormTitle(ev.title); setFormDescription(ev.description || ''); setFormDate(ev.date);
     setFormCategory(ev.category); setFormStatus(ev.status); setFormPriority(ev.priority);
-    setFormTaskId(ev.task_id || null);
+    setFormTaskId(ev.task_id || null); setFormDuration(ev.duration || '');
     if (ev.task_id) setLastSelectedTaskId(ev.task_id);
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     const isNew = !editingEvent;
-    const body = { title: formTitle, description: formDescription || undefined, date: formDate, category: formCategory, status: formStatus, priority: formPriority, task_id: formTaskId || undefined };
+    const body = { title: formTitle, description: formDescription || undefined, date: formDate, category: formCategory, status: formStatus, priority: formPriority, task_id: formTaskId || undefined, duration: formDuration || undefined };
     const url = editingEvent ? `/api/events/${editingEvent.id}` : '/api/events';
     const method = editingEvent ? 'PUT' : 'POST';
     await fetch(url, { method, credentials: 'include', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify(body) });
@@ -677,7 +773,7 @@ export default function CalendarPage() {
   };
 
   /* ─── 节气节日 ─── */
-  const monthExtras = useMemo(() => getMonthExtras(currentDate.getFullYear(), currentDate.getMonth() + 1), [currentDate]);
+  const monthExtras = useMemo(() => getMonthExtras(currentDate.getFullYear(), currentDate.getMonth()), [currentDate]);
 
   /* ─── 筛选逻辑 ─── */
   const categoryFilteredEvents = useMemo(() => events.filter(e => filterCategory === 'all' || e.category === filterCategory), [events, filterCategory]);
@@ -881,17 +977,24 @@ export default function CalendarPage() {
                     const isExpanded = expandedDates.has(dateStr);
                     const visibleEvs = isExpanded ? dayEvs : dayEvs.slice(0, gridShowCount);
                     const hiddenCount = dayEvs.length - gridShowCount;
+                    const extra: DayExtra | undefined = (monthExtras as Record<string, DayExtra>)?.[dateStr];
+                    const themeBg = getDayTheme(extra?.jieqi, extra?.holiday);
+                    const dayImg = getDayImage(extra?.jieqi, extra?.holiday);
 
                     return (
-                      <div key={dateStr}
-                        className={`group p-1.5 cursor-pointer transition-colors hover:bg-accent/50 ${
+                      <div key={dateStr} data-date-cell={dateStr}
+                        className={`group relative p-1.5 cursor-pointer transition-colors hover:bg-accent/50 flex flex-col overflow-hidden ${
                           today ? 'ring-1 ring-primary/30 shadow-sm' : ''
                         } ${!inMonth ? 'opacity-30 bg-card' : !workday ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-card'}`}
-                        onClick={() => openNewEvent(dateStr)}
+                        style={themeBg ? { backgroundImage: themeBg } : undefined}
+                        onClick={() => { if (inMonth) { const dayEvs = filteredEvents.filter(e => e.date === dateStr); if (dayEvs.length === 0) { openNewEvent(dateStr); } else { setDateListDate(dateStr); setDateListOpen(true); } } }}
                         onMouseDown={() => handleLongPressStart(dateStr)}
                         onMouseUp={handleLongPressEnd}
                         onMouseLeave={() => handleLongPressEnd()}>
-                        <div className="flex items-center gap-1 mb-0.5">
+                        {dayImg && inMonth && (
+                          <img src={dayImg} alt="" className="absolute inset-0 w-full h-full opacity-30 dark:opacity-50 pointer-events-none select-none object-contain p-0.5 mix-blend-multiply" />
+                        )}
+                        <div className="flex items-center gap-1 mb-0.5" data-date-header>
                           <span className={`text-sm tabular-nums font-medium ${
                             today ? 'bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs' :
                             !workday ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'
@@ -904,36 +1007,32 @@ export default function CalendarPage() {
                             <span className="text-[11px] text-teal-600 dark:text-teal-400 font-medium truncate">{monthExtras[dateStr].jieqi}</span>
                           )}
                           <div className="flex-1" />
-                          {dayEvs.length >= 1 && inMonth && (
-                            <button onClick={e => { e.stopPropagation(); setSortDialogDate(dateStr); setSortDialogOpen(true); }}
-                              className="text-muted-foreground hover:text-foreground text-[10px] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">☰</button>
-                          )}
-                          {inMonth && (
-                            <button onClick={e => { e.stopPropagation(); openNewEvent(dateStr); }}
-                              className="text-muted-foreground hover:text-primary text-[11px] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity font-light">+</button>
-                          )}
                         </div>
-                        <div className="space-y-px">
+                        <div className={`space-y-px flex-1 min-h-0 date-events-scroll ${isExpanded ? 'overflow-y-auto' : 'overflow-hidden'}`} onWheel={e => e.stopPropagation()}>
                           {visibleEvs.map(ev => (
                             <Tooltip key={ev.id}>
                               <TooltipTrigger asChild>
-                                <div onClick={e => { e.stopPropagation(); openEditEvent(ev); }}
+                                <div data-event-item onClick={e => { e.stopPropagation(); openEditEvent(ev); }}
                                   className={`flex items-center gap-1 px-1 py-px rounded-sm text-[11px] cursor-pointer transition-colors hover:bg-accent ${CATEGORY_CONFIG[ev.category].bg}`}>
                                   <span className={`w-1 self-stretch rounded-sm shrink-0 ${CATEGORY_CONFIG[ev.category].sidebar}`} />
-                                  <span className="truncate">{ev.title}</span>
+                                  <span className="truncate">{ev.title}{ev.duration ? <span className="text-muted-foreground ml-0.5">{ev.duration}h</span> : null}</span>
                                   <PriorityBadge priority={ev.priority} compact />
                                   {ev.task_id && <span className="text-[9px] text-violet-500 dark:text-violet-400 shrink-0">◆</span>}
                                   {ev.status === 'completed' && <span className="text-[10px] text-primary shrink-0 ml-auto">✓</span>}
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="text-xs">
-                                {ev.title}{ev.task_title ? ` · ${ev.task_title}` : ''}
+                                {ev.title}{ev.duration ? ` (${ev.duration}h)` : ''}{ev.task_title ? ` · ${ev.task_title}` : ''}
                               </TooltipContent>
                             </Tooltip>
                           ))}
                           {!isExpanded && hiddenCount > 0 && (
                             <button onClick={e => { e.stopPropagation(); toggleExpand(dateStr); }}
                               className="text-[10px] text-primary hover:underline">+{hiddenCount}</button>
+                          )}
+                          {isExpanded && hiddenCount > 0 && (
+                            <button onClick={e => { e.stopPropagation(); toggleExpand(dateStr); }}
+                              className="text-[10px] text-muted-foreground hover:text-foreground mt-0.5">收起</button>
                           )}
                         </div>
                       </div>
@@ -1016,6 +1115,10 @@ export default function CalendarPage() {
                 <Label className="text-[11px] text-muted-foreground">描述</Label>
                 <Textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} className="mt-0.5 min-h-[60px]" placeholder="可选" />
               </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">消耗时长（小时）</Label>
+                <Input value={formDuration} onChange={e => setFormDuration(e.target.value)} className="h-9 mt-0.5" placeholder="可选，如 1.5" type="number" min="0" step="0.5" />
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-[11px] text-muted-foreground">类别</Label>
@@ -1075,9 +1178,16 @@ export default function CalendarPage() {
           </DialogContent>
         </Dialog>
 
-        {/* ─── 排序弹窗 ─── */}
+        {/* ─── 排序弹窗 (移动端) ─── */}
         <SortDialog open={sortDialogOpen} onClose={() => setSortDialogOpen(false)}
           date={sortDialogDate} events={filteredEvents.filter(e => e.date === sortDialogDate)} onReorder={fetchEvents} />
+
+        {/* ─── 日期事项列表弹窗 (PC) ─── */}
+        <DateEventsDialog open={dateListOpen} onClose={() => setDateListOpen(false)}
+          date={dateListDate} events={filteredEvents.filter(e => e.date === dateListDate).sort((a, b) => (a.sort_order || '').localeCompare(b.sort_order || ''))}
+          onReorder={fetchEvents}
+          onAdd={() => { openNewEvent(dateListDate); }}
+          onEditEvent={(ev) => { openEditEvent(ev); }} />
 
         {/* ─── 日期设置弹窗 ─── */}
         <Dialog open={dateSettingDialogOpen} onOpenChange={setDateSettingDialogOpen}>

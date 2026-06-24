@@ -13,6 +13,7 @@ export interface EventItem {
   sort_order: string | null;
   task_id: string | null;
   task_title?: string;
+  duration: string | null;
   user_id: string | null;
   created_at: string;
   updated_at: string | null;
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await client
       .from('events')
-      .select('id, title, description, date, category, status, priority, sort_order, task_id, user_id, created_at, updated_at')
+      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, created_at, updated_at')
       .gte('date', startDate)
       .lt('date', endDate)
       .eq('user_id', userId)
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, date, category, status, priority, sort_order, task_id } = body;
+    const { title, description, date, category, status, priority, sort_order, task_id, duration } = body;
 
     if (!title || !date || !category) {
       return NextResponse.json({ error: '缺少必填字段：标题、日期、类别' }, { status: 400 });
@@ -109,6 +110,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '优先级值无效' }, { status: 400 });
     }
 
+    if (duration !== undefined && duration !== null && duration !== '') {
+      const dur = parseFloat(duration);
+      if (isNaN(dur) || dur < 0) {
+        return NextResponse.json({ error: '消耗时长无效，请输入非负数字' }, { status: 400 });
+      }
+    }
+
     const client = getSupabaseClient();
     const { data, error } = await client
       .from('events')
@@ -121,9 +129,10 @@ export async function POST(request: NextRequest) {
         priority: priority || 'normal',
         sort_order: sort_order || null,
         task_id: task_id || null,
+        duration: duration || null,
         user_id: userId,
       })
-      .select('id, title, description, date, category, status, priority, sort_order, task_id, user_id, created_at, updated_at')
+      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, created_at, updated_at')
       .maybeSingle();
 
     if (error) throw new Error(`创建失败: ${error.message}`);

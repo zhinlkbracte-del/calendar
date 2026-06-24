@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await client
       .from('events')
-      .select('id, title, description, date, category, status, priority, sort_order, task_id, user_id, created_at, updated_at')
+      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, created_at, updated_at')
       .eq('user_id', userId)
       .or(`title.ilike.${likePattern},description.ilike.${likePattern}`)
       .order('date', { ascending: false })

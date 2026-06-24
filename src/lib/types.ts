@@ -9,6 +9,7 @@ export interface EventItem {
   sort_order: string | null;
   task_id: string | null;
   task_title?: string;
+  duration: string | null;
   created_at: string;
   updated_at: string | null;
 }

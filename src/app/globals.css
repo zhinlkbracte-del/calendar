@@ -257,3 +257,12 @@ body {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-20px); }
 }
+
+/* Hide scrollbar for date event lists */
+.date-events-scroll::-webkit-scrollbar {
+  display: none;
+}
+.date-events-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
