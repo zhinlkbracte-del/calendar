@@ -75,16 +75,19 @@ export async function GET(request: NextRequest) {
 
     XLSX.utils.book_append_sheet(wb, ws, '事项');
 
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
 
-    // 文件名包含导出时的年月
+    // 文件名包含导出的年月，使用ASCII文件名避免编码问题
     const now = new Date();
     const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const asciiName = `events_${ym}.xlsx`;
+    const utf8Name = encodeURIComponent(`事项_${ym}.xlsx`);
 
     return new NextResponse(buf, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="events_${ym}.xlsx"`,
+        'Content-Disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
+        'Content-Length': String(buf.byteLength),
       },
     });
   } catch (err) {

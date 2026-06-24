@@ -47,12 +47,16 @@ export async function GET() {
 
   XLSX.utils.book_append_sheet(wb, ws2, '填写说明');
 
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+  const asciiName = 'events_template.xlsx';
+  const utf8Name = encodeURIComponent('事项模板.xlsx');
 
   return new NextResponse(buf, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename="events_template.xlsx"',
+      'Content-Disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
+      'Content-Length': String(buf.byteLength),
     },
   });
 }
