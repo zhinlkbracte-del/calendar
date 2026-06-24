@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import type { EventItem, EventCategory, EventStatus, EventPriority, FilterCategory, TaskItem } from '@/lib/types';
 import { CATEGORY_CONFIG, STATUS_CONFIG, PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '@/lib/types';
-import * as XLSX from 'xlsx';
 import { getMonthExtras, getDayTheme, type DayExtra } from '@/lib/holidays';
 import { getDayImage } from '@/lib/day-svg';
 import { useAuth } from '@/lib/auth-context';
@@ -720,34 +719,29 @@ export default function CalendarPage() {
   /* ─── 导入导出 ─── */
   const handleExport = async () => {
     try {
-      // 前端直接从当前已加载的events生成xlsx，绕过服务端xlsx库在生产环境的兼容性问题
-      const rows = events.map(e => ({
-        '日期': e.date,
-        '标题': e.title,
-        '描述': e.description || '',
-        '类别': CATEGORY_CONFIG[e.category]?.label || e.category,
-        '状态': STATUS_CONFIG[e.status as keyof typeof STATUS_CONFIG]?.label || e.status,
-        '优先级': PRIORITY_CONFIG[e.priority as keyof typeof PRIORITY_CONFIG]?.label || e.priority,
-        '关联任务': e.task_title || '',
+      // 前端直接用XLSX生成文件，避免服务端兼容问题
+      const XLSX = await import('xlsx');
+      const res = await fetch('/api/events?month=all', { credentials: 'include', headers: { ...getAuthHeaders() } });
+      if (!res.ok) throw new Error('获取事项失败');
+      const result = await res.json();
+      const allEvents: EventItem[] = result.data || [];
+      if (allEvents.length === 0) { alert('暂无事项可导出'); return; }
+      const rows = allEvents.map(ev => ({
+        '日期': ev.date,
+        '标题': ev.title,
+        '描述': ev.description || '',
+        '类别': ev.category === 'work' ? '工作' : '生活',
+        '状态': ev.status === 'not_started' ? '未开始' : ev.status === 'in_progress' ? '进行中' : '已完成',
+        '优先级': ev.priority === 'urgent' ? '紧急' : ev.priority === 'important' ? '重要' : '普通',
+        '消耗时长': ev.duration || '',
+        '关联任务': ev.task_title || '',
       }));
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [
-        { wch: 12 }, { wch: 30 }, { wch: 40 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 20 },
-      ];
+      ws['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 40 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, ws, '事项');
-      // 在浏览器端使用 array 类型输出，XLSX会自动处理为ArrayBuffer
-      const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-      const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const now = new Date();
-      const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-      a.download = `事项_${ym}.xlsx`;
-      a.click();
-      // 延时释放，避免Chrome下载管理器还没读完blob数据就回收了URL
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const yearMonth = `${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+      XLSX.writeFile(wb, `events_${yearMonth}.xlsx`);
     } catch (err) {
       alert(err instanceof Error ? err.message : '导出失败');
     }

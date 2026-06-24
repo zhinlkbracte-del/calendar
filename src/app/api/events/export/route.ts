@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as XLSX from 'xlsx';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { verifyToken, getTokenFromRequest } from '@/lib/auth';
 
@@ -59,6 +58,8 @@ export async function GET(request: NextRequest) {
       '关联任务': e.task_id ? (taskTitleMap[e.task_id as string] || '') : '',
     }));
 
+    // 动态导入xlsx，避免生产环境打包问题
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
 
@@ -75,20 +76,26 @@ export async function GET(request: NextRequest) {
 
     XLSX.utils.book_append_sheet(wb, ws, '事项');
 
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    // 使用 base64 编码，再转换为 Buffer，兼容性最好
+    const base64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' }) as string;
+    const buffer = Buffer.from(base64, 'base64');
 
-    // 文件名包含导出时的年月
+    // 文件名包含导出的年月
     const now = new Date();
     const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const asciiName = `events_${ym}.xlsx`;
+    const utf8Name = encodeURIComponent(`事项_${ym}.xlsx`);
 
-    return new NextResponse(buf, {
+    return new NextResponse(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="events_${ym}.xlsx"`,
+        'Content-Disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
+        'Content-Length': String(buffer.length),
       },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : '未知错误';
+    console.error('导出失败:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
