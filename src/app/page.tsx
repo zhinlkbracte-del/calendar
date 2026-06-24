@@ -449,37 +449,37 @@ export default function CalendarPage() {
   const [gridShowCount, setGridShowCount] = useState(2);
 
   // 动态计算PC日历每格可显示的事项数量
+  const recalcGridShowCount = useCallback(() => {
+    if (isMobile) return;
+    const el = calendarGridRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const firstCell = el.querySelector('[data-date-cell]') as HTMLElement;
+        if (!firstCell || firstCell.clientHeight === 0) return;
+        const cellHeight = firstCell.clientHeight;
+        const header = firstCell.querySelector('[data-date-header]') as HTMLElement;
+        const headerHeight = header ? header.offsetHeight + 2 : 24;
+        const firstEvent = firstCell.querySelector('[data-event-item]') as HTMLElement;
+        const eventItemHeight = firstEvent ? firstEvent.offsetHeight + 1 : 20;
+        const paddingY = 12;
+        const availableForEvents = cellHeight - headerHeight - paddingY - 18;
+        const countWithoutFold = Math.max(1, Math.floor((cellHeight - headerHeight - paddingY - 4) / eventItemHeight));
+        const countWithFold = Math.max(1, Math.floor(availableForEvents / eventItemHeight));
+        setGridShowCount(countWithoutFold > countWithFold ? countWithFold : countWithoutFold);
+      });
+    });
+  }, [isMobile]);
+
   useEffect(() => {
     if (isMobile) return;
     const el = calendarGridRef.current;
     if (!el) return;
-    const calc = () => {
-      requestAnimationFrame(() => {
-        // 找到第一个可见的日期格子来测量
-        const firstCell = el.querySelector('[data-date-cell]') as HTMLElement;
-        if (!firstCell) return;
-        const cellHeight = firstCell.clientHeight;
-        // 测量头部实际高度（日期数字行）
-        const header = firstCell.querySelector('[data-date-header]') as HTMLElement;
-        const headerHeight = header ? header.offsetHeight + 2 : 24; // +2 for mb-0.5
-        // 测量单条事项的实际高度
-        const firstEvent = firstCell.querySelector('[data-event-item]') as HTMLElement;
-        const eventItemHeight = firstEvent ? firstEvent.offsetHeight + 1 : 20; // +1 for space-y-px gap
-        // 格子padding: p-1.5 = 6px * 2
-        const paddingY = 12;
-        const availableForEvents = cellHeight - headerHeight - paddingY - 18; // 18px: +N按钮高度(~14px)+余量(4px)
-        // 先按不显示+N按钮来算可显示数量
-        const countWithoutFold = Math.max(1, Math.floor((cellHeight - headerHeight - paddingY - 4) / eventItemHeight));
-        // 如果需要折叠，要留出+N按钮的空间
-        const countWithFold = Math.max(1, Math.floor(availableForEvents / eventItemHeight));
-        setGridShowCount(countWithoutFold > countWithFold ? countWithFold : countWithoutFold);
-      });
-    };
-    const observer = new ResizeObserver(calc);
+    const observer = new ResizeObserver(() => recalcGridShowCount());
     observer.observe(el);
-    calc();
+    recalcGridShowCount();
     return () => observer.disconnect();
-  }, [isMobile, currentDate, events.length]);
+  }, [isMobile, currentDate, events.length, recalcGridShowCount]);
 
   // 事项弹窗
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -518,6 +518,13 @@ export default function CalendarPage() {
 
   // 模块切换
   const [activeModule, setActiveModule] = useState<'schedule' | 'tasks'>('schedule');
+
+  // 切换回日程时重新计算事项显示数量
+  useEffect(() => {
+    if (activeModule === 'schedule') {
+      recalcGridShowCount();
+    }
+  }, [activeModule, recalcGridShowCount]);
 
   // 导入导出
   const [importing, setImporting] = useState(false);
