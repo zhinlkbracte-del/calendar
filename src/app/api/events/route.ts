@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const yearMonth = searchParams.get('month');
 
-  if (!yearMonth || !/^\d{4}-\d{2}$/.test(yearMonth)) {
-    return NextResponse.json({ error: '月份参数格式错误，请使用 YYYY-MM 格式' }, { status: 400 });
+  if (!yearMonth || (!/^\d{4}-\d{2}$/.test(yearMonth) && yearMonth !== 'all')) {
+    return NextResponse.json({ error: '月份参数格式错误，请使用 YYYY-MM 格式或 all' }, { status: 400 });
   }
 
   const userId = getUserId(request);
