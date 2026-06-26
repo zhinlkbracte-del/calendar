@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
     let avatarUrl: string | null = null;
     if (user.avatar_key) {
       try {
-        const { getPresignedUrl } = await import('@/lib/storage-client');
-        avatarUrl = await getPresignedUrl(user.avatar_key, 3600);
+        const { getAvatarUrl } = await import('@/lib/storage-client');
+        avatarUrl = getAvatarUrl(user.avatar_key);
       } catch { /* ignore */ }
     }
 

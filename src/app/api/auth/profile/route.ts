@@ -50,8 +50,8 @@ export async function PUT(request: NextRequest) {
     let avatarResultUrl: string | null = null;
     if (data.avatar_key) {
       try {
-        const { getPresignedUrl } = await import('@/lib/storage-client');
-        avatarResultUrl = await getPresignedUrl(data.avatar_key, 3600);
+        const { getAvatarUrl } = await import('@/lib/storage-client');
+        avatarResultUrl = getAvatarUrl(data.avatar_key);
       } catch { /* ignore */ }
     }
 
