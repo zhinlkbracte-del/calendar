@@ -10,6 +10,7 @@ import AuthPage from '@/components/auth-page';
 import ProfileDialog from '@/components/profile-dialog';
 import TaskPanel from '@/components/task-panel';
 import { SearchDialog } from '@/components/search-dialog';
+import { AgentConfigDialog } from '@/components/agent-config-dialog';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
@@ -512,6 +513,7 @@ export default function CalendarPage() {
   const [dateSettingType, setDateSettingType] = useState<'workday' | 'restday'>('workday');
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [agentConfigOpen, setAgentConfigOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressDateRef = useRef('');
   const longPressTriggered = useRef(false);
@@ -719,19 +721,29 @@ export default function CalendarPage() {
   /* ─── 导入导出 ─── */
   const handleExport = async () => {
     try {
-      const res = await fetch('/api/events/export', { credentials: 'include', headers: { ...getAuthHeaders() } });
-      if (!res.ok) throw new Error('导出失败');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      // 从响应头获取文件名，否则用默认名
-      const disposition = res.headers.get('Content-Disposition') || '';
-      const match = disposition.match(/filename="?([^"]+)"?/);
-      a.download = match ? match[1] : 'events_export.xlsx';
-      a.click();
-      // 延时释放，避免Chrome下载管理器还没读完blob数据就回收了URL
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      // 前端直接用XLSX生成文件，避免服务端兼容问题
+      const XLSX = await import('xlsx');
+      const res = await fetch('/api/events?month=all', { credentials: 'include', headers: { ...getAuthHeaders() } });
+      if (!res.ok) throw new Error('获取事项失败');
+      const result = await res.json();
+      const allEvents: EventItem[] = result.data || [];
+      if (allEvents.length === 0) { alert('暂无事项可导出'); return; }
+      const rows = allEvents.map(ev => ({
+        '日期': ev.date,
+        '标题': ev.title,
+        '描述': ev.description || '',
+        '类别': ev.category === 'work' ? '工作' : '生活',
+        '状态': ev.status === 'not_started' ? '未开始' : ev.status === 'in_progress' ? '进行中' : '已完成',
+        '优先级': ev.priority === 'urgent' ? '紧急' : ev.priority === 'important' ? '重要' : '普通',
+        '消耗时长': ev.duration || '',
+        '关联任务': ev.task_title || '',
+      }));
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 40 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws, '事项');
+      const yearMonth = `${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+      XLSX.writeFile(wb, `events_${yearMonth}.xlsx`);
     } catch (err) {
       alert(err instanceof Error ? err.message : '导出失败');
     }
@@ -872,6 +884,7 @@ export default function CalendarPage() {
                 availableTasks={availableTasks}
                 onRefresh={fetchEvents}
               />
+              <AgentConfigDialog open={agentConfigOpen} onOpenChange={setAgentConfigOpen} />
             </div>
           </div>
         </header>
@@ -921,6 +934,14 @@ export default function CalendarPage() {
                   title="搜索事项"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </button>
+                {/* Agent */}
+                <button
+                  onClick={() => setAgentConfigOpen(true)}
+                  className="p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors border border-border px-2"
+                  title="Agent 接入管理"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
                 </button>
                 {/* 导入导出 */}
                 <DropdownMenu>

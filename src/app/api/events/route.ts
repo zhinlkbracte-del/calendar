@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const yearMonth = searchParams.get('month');
 
-  if (!yearMonth || !/^\d{4}-\d{2}$/.test(yearMonth)) {
-    return NextResponse.json({ error: '月份参数格式错误，请使用 YYYY-MM 格式' }, { status: 400 });
+  if (!yearMonth || (!/^\d{4}-\d{2}$/.test(yearMonth) && yearMonth !== 'all')) {
+    return NextResponse.json({ error: '月份参数格式错误，请使用 YYYY-MM 格式或 all' }, { status: 400 });
   }
 
   const userId = getUserId(request);
@@ -41,18 +41,22 @@ export async function GET(request: NextRequest) {
 
   try {
     const client = getSupabaseClient();
-    const startDate = `${yearMonth}-01`;
-    const [year, month] = yearMonth.split('-').map(Number);
-    const nextMonth = month === 12 ? 1 : month + 1;
-    const nextYear = month === 12 ? year + 1 : year;
-    const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
-    const { data, error } = await client
+    let query = client
       .from('events')
       .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, created_at, updated_at')
-      .gte('date', startDate)
-      .lt('date', endDate)
-      .eq('user_id', userId)
+      .eq('user_id', userId);
+
+    if (yearMonth !== 'all') {
+      const startDate = `${yearMonth}-01`;
+      const [year, month] = yearMonth.split('-').map(Number);
+      const nextMonth = month === 12 ? 1 : month + 1;
+      const nextYear = month === 12 ? year + 1 : year;
+      const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+      query = query.gte('date', startDate).lt('date', endDate);
+    }
+
+    const { data, error } = await query
       .order('date', { ascending: true })
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });

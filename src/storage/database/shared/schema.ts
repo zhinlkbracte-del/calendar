@@ -1,4 +1,4 @@
-import { pgTable, serial, timestamp, index, varchar, text, unique } from "drizzle-orm/pg-core"
+import { pgTable, serial, timestamp, index, varchar, text, boolean, jsonb, unique } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 // PostgreSQL built-in function - declare for TypeScript
@@ -76,4 +76,18 @@ export const tasks = pgTable("tasks", {
 	index("tasks_status_idx").using("btree", table.status.asc().nullsLast().op("text_ops")),
 	index("tasks_urgency_type_idx").using("btree", table.urgencyType.asc().nullsLast().op("text_ops")),
 	index("tasks_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
+]);
+
+export const agentConfigs = pgTable("agent_configs", {
+	id: varchar({ length: 36 }).default(gen_random_uuid()).primaryKey().notNull(),
+	userId: varchar("user_id", { length: 36 }).notNull(),
+	name: varchar({ length: 50 }).default('My Agent').notNull(),
+	apiKey: varchar("api_key", { length: 64 }).notNull(),
+	permissions: jsonb().default({ events: { read: true, create: true, update: true, delete: true }, tasks: { read: true, create: true, update: true, delete: true } }).notNull(),
+	isActive: boolean("is_active").default(true).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
+}, (table) => [
+	index("agent_configs_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
+	unique("agent_configs_api_key_unique").on(table.apiKey),
 ]);
