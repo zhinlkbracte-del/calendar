@@ -154,13 +154,13 @@ function generateHermesSkill(baseUrl: string, apiKey: string, webhookUrl: string
       headers: {
         'X-API-Key': apiKey,
       },
-      ...(webhookUrl ? { webhook: { url: webhookUrl, mode: 'deliver-only', signature: 'HMAC-SHA256 via X-Webhook-Signature header (if webhook_secret configured)' } } : {}),
+      ...(webhookUrl ? { webhook: { url: webhookUrl, mode: 'deliver-only', signature: 'HMAC-SHA256 via X-Hub-Signature-256 header (if webhook_secret configured)' } } : {}),
     },
     webhook: webhookUrl ? {
       description: '提醒通知推送（Webhook deliver-only 模式，不走 LLM，不消耗 token）',
       url: webhookUrl,
       mode: 'deliver-only',
-      signature: 'HMAC-SHA256（X-Webhook-Signature: sha256=<hex>），仅当配置了 Webhook Secret 时包含',
+      signature: 'HMAC-SHA256（X-Hub-Signature-256: sha256=<hex>），仅当配置了 Webhook Secret 时包含',
       note: '当用户的事项到达提醒时间时，系统会主动 POST 到此 webhook URL，收到后直接渲染推送给用户即可，无需 LLM 处理。用户确认后调用 dismiss-reminder 关闭提醒。',
       how_to_get_url: {
         codex: '设置 → 通知 → Webhook → 添加端点 URL',
@@ -190,9 +190,9 @@ function generateOpenClawSkill(baseUrl: string, apiKey: string, webhookUrl: stri
 
 请求头：
 - \`Content-Type: application/json\`
-- \`X-Webhook-Signature: sha256=<HMAC-SHA256签名>\`（仅当配置了 Webhook Secret 时包含）
+- \`X-Hub-Signature-256: sha256=<HMAC-SHA256签名>\`（仅当配置了 Webhook Secret 时包含）
 
-签名验证：使用 Webhook Secret 对请求 body 做 HMAC-SHA256，与 X-Webhook-Signature 头比对即可验证来源。
+签名验证：使用 Webhook Secret 对请求 body 做 HMAC-SHA256，与 X-Hub-Signature-256 头比对即可验证来源。
 
 \`\`\`json
 {

@@ -188,7 +188,7 @@ DELETE /api/agent/events/{id}
 
 请求头：
 - \`Content-Type: application/json\`
-- \`X-Webhook-Signature: sha256=<HMAC-SHA256签名>\`（仅当配置了 Webhook Secret 时包含）
+- \`X-Hub-Signature-256: sha256=<HMAC-SHA256签名>\`（仅当配置了 Webhook Secret 时包含）
 
 请求体：
 \`\`\`json
@@ -208,10 +208,10 @@ DELETE /api/agent/events/{id}
 }
 \`\`\`
 
-**签名验证**：如果配置了 Webhook Secret，推送请求会携带 \`X-Webhook-Signature\` 头，值为 \`sha256=\` + HMAC-SHA256(request_body, secret)。验证方法：
+**签名验证**：如果配置了 Webhook Secret，推送请求会携带 \`X-Hub-Signature-256\` 头，值为 \`sha256=\` + HMAC-SHA256(request_body, secret)。验证方法：
 \`\`\`
 signature = "sha256=" + HMAC-SHA256(request_body, webhook_secret).hex()
-compare(signature, X-Webhook-Signature header)
+compare(signature, X-Hub-Signature-256 header)
 \`\`\`
 
 **收到推送后的操作**：

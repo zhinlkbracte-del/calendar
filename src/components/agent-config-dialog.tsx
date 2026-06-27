@@ -122,9 +122,9 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
 
 请求头：
 - Content-Type: application/json
-- X-Webhook-Signature: sha256=<HMAC-SHA256签名>（仅当配置了 Webhook Secret 时包含）
+- X-Hub-Signature-256: sha256=<HMAC-SHA256签名>（仅当配置了 Webhook Secret 时包含）
 
-签名验证：使用 Webhook Secret 对请求 body 做 HMAC-SHA256，将结果与 X-Webhook-Signature 头中的值比对，即可验证请求来源真实性。
+签名验证：使用 Webhook Secret 对请求 body 做 HMAC-SHA256，将结果与 X-Hub-Signature-256 头中的值比对，即可验证请求来源真实性。
 
 收到推送后直接渲染通知给用户。用户确认后调用关闭提醒接口。
 
@@ -405,7 +405,7 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                       </div>
                     )}
                     <p className="text-[10px] text-muted-foreground">
-                      配置后，事项到达提醒时间将主动 POST 推送（deliver-only 模式，不走 LLM，不消耗 token）。配置 Secret 后，推送将携带 X-Webhook-Signature 头（HMAC-SHA256），对方可据此验证请求真实性。
+                      配置后，事项到达提醒时间将主动 POST 推送（deliver-only 模式，不走 LLM，不消耗 token）。配置 Secret 后，推送将携带 X-Hub-Signature-256 头（HMAC-SHA256），对方可据此验证请求真实性。
                     </p>
                     <button
                       type="button"

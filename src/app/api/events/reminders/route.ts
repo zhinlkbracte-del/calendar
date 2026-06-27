@@ -55,7 +55,7 @@ async function pushToWebhooks(userId: string, reminders: { id: string; title: st
             // Add HMAC-SHA256 signature if webhook_secret is configured
             if (agent.webhook_secret) {
               const signature = createHmac('sha256', agent.webhook_secret).update(bodyStr).digest('hex');
-              headers['X-Webhook-Signature'] = `sha256=${signature}`;
+              headers['X-Hub-Signature-256'] = `sha256=${signature}`;
             }
             await fetch(agent.webhook_url, {
               method: 'POST',
