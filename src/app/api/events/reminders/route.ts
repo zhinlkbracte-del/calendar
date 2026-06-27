@@ -28,21 +28,33 @@ async function pushToWebhooks(userId: string, reminders: { id: string; title: st
 
     if (!agents || agents.length === 0) return;
 
+    const categoryLabel: Record<string, string> = { work: '工作', life: '生活' };
+    const priorityLabel: Record<string, string> = { urgent: '紧急', important: '重要', normal: '普通' };
+    const formatTime = (iso: string | null) => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    };
+    const formatDate = (dateStr: string) => {
+      const [y, m, d] = dateStr.split('-');
+      return `${y}年${parseInt(m)}月${parseInt(d)}日`;
+    };
+
     const first = reminders[0];
     const payload = {
-      type: 'reminder' as const,
+      type: '提醒通知' as const,
       title: first.title,
-      date: first.date,
-      category: first.category,
-      priority: first.priority,
-      reminder_at: first.reminder_at,
+      date: formatDate(first.date),
+      category: categoryLabel[first.category] || first.category,
+      priority: priorityLabel[first.priority] || first.priority,
+      reminder_at: formatTime(first.reminder_at),
       reminders: reminders.map(r => ({
         event_id: r.id,
         title: r.title,
-        date: r.date,
-        category: r.category,
-        priority: r.priority,
-        reminder_at: r.reminder_at,
+        date: formatDate(r.date),
+        category: categoryLabel[r.category] || r.category,
+        priority: priorityLabel[r.priority] || r.priority,
+        reminder_at: formatTime(r.reminder_at),
       })),
       count: reminders.length,
     };

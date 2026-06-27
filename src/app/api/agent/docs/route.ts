@@ -190,23 +190,29 @@ DELETE /api/agent/events/{id}
 - \`Content-Type: application/json\`
 - \`X-Hub-Signature-256: sha256=<HMAC-SHA256签名>\`（仅当配置了 Webhook Secret 时包含）
 
-请求体：
+请求体（所有字段均为中文，便于模板引擎直接渲染）：
 \`\`\`json
 {
-  "type": "reminder",
+  "type": "提醒通知",
+  "title": "项目评审会议",
+  "date": "2026年6月15日",
+  "category": "工作",
+  "priority": "重要",
+  "reminder_at": "2026年6月15日 09:00",
   "reminders": [
     {
       "event_id": "uuid",
       "title": "项目评审会议",
-      "date": "2026-06-15",
-      "category": "work",
-      "priority": "important",
-      "reminder_at": "2026-06-15T09:00:00+08:00"
+      "date": "2026年6月15日",
+      "category": "工作",
+      "priority": "重要",
+      "reminder_at": "2026年6月15日 09:00"
     }
   ],
   "count": 1
 }
 \`\`\`
+顶层字段取自第一条提醒，模板可直接用 \`{title}\` \`{date}\` \`{category}\` \`{priority}\` \`{reminder_at}\` 引用。\`reminders\` 数组供需要遍历多条提醒的场景。
 
 **签名验证**：如果配置了 Webhook Secret，推送请求会携带 \`X-Hub-Signature-256\` 头，值为 \`sha256=\` + HMAC-SHA256(request_body, secret)。验证方法：
 \`\`\`

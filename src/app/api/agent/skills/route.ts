@@ -196,20 +196,27 @@ function generateOpenClawSkill(baseUrl: string, apiKey: string, webhookUrl: stri
 
 \`\`\`json
 {
-  "type": "reminder",
+  "type": "提醒通知",
+  "title": "事项标题",
+  "date": "2026年6月15日",
+  "category": "工作",
+  "priority": "紧急",
+  "reminder_at": "2026年6月15日 09:00",
   "reminders": [
     {
       "event_id": "uuid",
       "title": "事项标题",
-      "date": "2026-06-15",
-      "category": "work",
-      "priority": "urgent",
-      "reminder_at": "2026-06-15T09:00:00+08:00"
+      "date": "2026年6月15日",
+      "category": "工作",
+      "priority": "紧急",
+      "reminder_at": "2026年6月15日 09:00"
     }
   ],
   "count": 1
 }
 \`\`\`
+
+顶层字段取自第一条提醒，模板可直接用 \`{title}\` \`{date}\` \`{category}\` \`{priority}\` \`{reminder_at}\` 引用。
 
 ### 收到推送后的操作
 
