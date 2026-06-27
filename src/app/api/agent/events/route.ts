@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const supabase = getServiceRoleClient();
   let query = supabase
     .from('events')
-    .select('id, title, description, date, category, status, priority, sort_order, duration, task_id, created_at, updated_at')
+    .select('id, title, description, date, category, status, priority, sort_order, duration, task_id, reminder_at, reminder_notified, created_at, updated_at')
     .eq('user_id', auth.userId)
     .order('date', { ascending: true })
     .order('sort_order', { ascending: true });
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, date, category, status, priority, description, duration } = body;
+    const { title, date, category, status, priority, description, duration, reminder_at } = body;
 
     if (!title || !date) {
       return NextResponse.json({ error: '标题和日期为必填项' }, { status: 400 });
@@ -65,6 +65,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '优先级应为 urgent、important 或 normal' }, { status: 400 });
     }
 
+    // Validate reminder_at
+    let reminderAtValue: string | null = null;
+    if (reminder_at) {
+      const reminderDate = new Date(reminder_at);
+      if (isNaN(reminderDate.getTime())) {
+        return NextResponse.json({ error: '提醒时间格式无效，应为ISO 8601格式' }, { status: 400 });
+      }
+      reminderAtValue = reminderDate.toISOString();
+    }
+
     const supabase = getServiceRoleClient();
     const { data, error } = await supabase
       .from('events')
@@ -76,9 +86,11 @@ export async function POST(request: NextRequest) {
         priority: priority || 'normal',
         description: description || null,
         duration: duration || null,
+        reminder_at: reminderAtValue,
+        reminder_notified: false,
         user_id: auth.userId,
       })
-      .select('id, title, description, date, category, status, priority, duration, created_at')
+      .select('id, title, description, date, category, status, priority, duration, reminder_at, reminder_notified, created_at')
       .single();
 
     if (error) {

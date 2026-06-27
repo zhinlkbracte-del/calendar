@@ -156,6 +156,7 @@ function DateEventsDialog({ open, onClose, date, events, onReorder, onAdd, onEdi
                 <span className="text-sm truncate flex-1 cursor-pointer" onClick={() => onEditEvent(ev)}>
                   {ev.title}{ev.duration ? <span className="text-muted-foreground ml-1">{ev.duration}h</span> : null}
                 </span>
+                {ev.reminder_at && !ev.reminder_notified && <span className={`shrink-0 ${new Date(ev.reminder_at) <= new Date() ? 'text-red-500 animate-pulse' : 'text-muted-foreground/50'}`} title={new Date(ev.reminder_at) <= new Date() ? '提醒已到期' : '已设提醒'}><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>}
                 <PriorityBadge priority={ev.priority} compact />
                 {ev.status === 'completed' && <span className="text-[10px] text-primary shrink-0">✓</span>}
               </div>
@@ -222,6 +223,7 @@ function SortDialog({ open, onClose, date, events, onReorder }: {
               <span className="text-muted-foreground text-xs">☰</span>
               <span className={`w-1.5 h-1.5 rounded-full ${CATEGORY_CONFIG[ev.category].dot}`} />
               <span className="text-sm truncate flex-1">{ev.title}{ev.duration ? <span className="text-muted-foreground ml-1">{ev.duration}h</span> : null}</span>
+              {ev.reminder_at && !ev.reminder_notified && <span className={`shrink-0 ${new Date(ev.reminder_at) <= new Date() ? 'text-red-500 animate-pulse' : 'text-muted-foreground/50'}`}><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>}
               <PriorityBadge priority={ev.priority} compact />
             </div>
           ))}
@@ -404,6 +406,7 @@ function MobileWeekView({ currentDate, events, filterCategory, filterPriority, e
                           <span className="text-xs truncate flex-1">
                             {ev.title}{ev.duration ? <span className="text-muted-foreground ml-0.5">{ev.duration}h</span> : null}
                           </span>
+                          {ev.reminder_at && !ev.reminder_notified && <span className={`shrink-0 ${new Date(ev.reminder_at) <= new Date() ? 'text-red-500 animate-pulse' : 'text-muted-foreground/50'}`}><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>}
                           <PriorityBadge priority={ev.priority} compact />
                           {ev.task_id && (
                             <span className="text-[9px] text-muted-foreground truncate max-w-[60px]">◆ {ev.task_title}</span>
@@ -493,6 +496,15 @@ export default function CalendarPage() {
   const [formPriority, setFormPriority] = useState<EventPriority>('normal');
   const [formTaskId, setFormTaskId] = useState<string | null>(null);
   const [formDuration, setFormDuration] = useState('');
+  const [formReminderEnabled, setFormReminderEnabled] = useState(false);
+  const [formReminderAt, setFormReminderAt] = useState('');
+
+  // 提醒通知
+  const [activeReminders, setActiveReminders] = useState<EventItem[]>([]);
+  const [reminderSoundEnabled, setReminderSoundEnabled] = useState(true);
+  const reminderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const titleFlashRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const originalTitleRef = useRef<string>('');
 
   // 排序弹窗
   const [sortDialogDate, setSortDialogDate] = useState('');
@@ -602,6 +614,97 @@ export default function CalendarPage() {
     return () => { mounted = false; };
   }, [fetchEvents, fetchDateSettings, fetchAvailableTasks, user]);
 
+  // ─── 提醒通知检测 ───
+  // 加载提醒音效设置
+  useEffect(() => {
+    const saved = localStorage.getItem('reminder-sound-enabled');
+    if (saved !== null) setReminderSoundEnabled(saved === 'true');
+  }, []);
+
+  const dismissReminder = useCallback(async (eventId: string) => {
+    setActiveReminders(prev => prev.filter(r => r.id !== eventId));
+    // 标记为已通知
+    try {
+      await fetch('/api/events/reminders', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ event_ids: [eventId] }),
+      });
+    } catch {}
+  }, [getAuthHeaders]);
+
+  const dismissAllReminders = useCallback(async () => {
+    const ids = activeReminders.map(r => r.id);
+    setActiveReminders([]);
+    if (ids.length > 0) {
+      try {
+        await fetch('/api/events/reminders', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ event_ids: ids }),
+        });
+      } catch {}
+    }
+  }, [activeReminders, getAuthHeaders]);
+
+  // 标签闪动
+  useEffect(() => {
+    if (activeReminders.length > 0) {
+      if (!originalTitleRef.current) originalTitleRef.current = document.title;
+      let toggle = false;
+      titleFlashRef.current = setInterval(() => {
+        document.title = toggle ? `🔔 ${activeReminders.length}条提醒` : originalTitleRef.current;
+        toggle = !toggle;
+      }, 800);
+    } else {
+      if (titleFlashRef.current) { clearInterval(titleFlashRef.current); titleFlashRef.current = null; }
+      if (originalTitleRef.current) { document.title = originalTitleRef.current; }
+    }
+    return () => { if (titleFlashRef.current) clearInterval(titleFlashRef.current); };
+  }, [activeReminders.length]);
+
+  // 轮询检测到期提醒
+  useEffect(() => {
+    if (!user) return;
+    const checkReminders = async () => {
+      try {
+        const res = await fetch('/api/events/reminders', { credentials: 'include', headers: { ...getAuthHeaders() } });
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          setActiveReminders(prev => {
+            const existingIds = new Set(prev.map(r => r.id));
+            const newReminders = json.data.filter((r: EventItem) => !existingIds.has(r.id));
+            if (newReminders.length > 0) {
+              // 播放音效
+              if (reminderSoundEnabled) {
+                try {
+                  const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+                  const oscillator = audioCtx.createOscillator();
+                  const gainNode = audioCtx.createGain();
+                  oscillator.connect(gainNode);
+                  gainNode.connect(audioCtx.destination);
+                  oscillator.frequency.value = 800;
+                  oscillator.type = 'sine';
+                  gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                  gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+                  oscillator.start(audioCtx.currentTime);
+                  oscillator.stop(audioCtx.currentTime + 0.8);
+                } catch {}
+              }
+              return [...prev, ...newReminders];
+            }
+            return prev;
+          });
+        }
+      } catch {}
+    };
+    checkReminders();
+    reminderTimerRef.current = setInterval(checkReminders, 15000);
+    return () => { if (reminderTimerRef.current) clearInterval(reminderTimerRef.current); };
+  }, [user, getAuthHeaders, reminderSoundEnabled]);
+
   const isWorkday = useCallback((d: Date) => {
     const dateStr = format(d, 'yyyy-MM-dd');
     if (dateSettings[dateStr]) return dateSettings[dateStr] === 'workday';
@@ -689,6 +792,7 @@ export default function CalendarPage() {
     setFormCategory(filterCategory === 'life' ? 'life' : 'work');
     setFormStatus('not_started'); setFormPriority('normal');
     setFormTaskId(null); setFormDuration('');
+    setFormReminderEnabled(false); setFormReminderAt('');
     setDialogOpen(true);
   };
 
@@ -697,13 +801,24 @@ export default function CalendarPage() {
     setFormTitle(ev.title); setFormDescription(ev.description || ''); setFormDate(ev.date);
     setFormCategory(ev.category); setFormStatus(ev.status); setFormPriority(ev.priority);
     setFormTaskId(ev.task_id || null); setFormDuration(ev.duration || '');
+    setFormReminderEnabled(!!ev.reminder_at);
+    if (ev.reminder_at) {
+      const d = new Date(ev.reminder_at);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      setFormReminderAt(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    } else {
+      setFormReminderAt('');
+    }
     if (ev.task_id) setLastSelectedTaskId(ev.task_id);
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     const isNew = !editingEvent;
-    const body = { title: formTitle, description: formDescription || undefined, date: formDate, category: formCategory, status: formStatus, priority: formPriority, task_id: formTaskId || undefined, duration: formDuration || undefined };
+    const body = {
+      title: formTitle, description: formDescription || undefined, date: formDate, category: formCategory, status: formStatus, priority: formPriority, task_id: formTaskId || undefined, duration: formDuration || undefined,
+      reminder_at: formReminderEnabled && formReminderAt ? new Date(formReminderAt).toISOString() : null,
+    };
     const url = editingEvent ? `/api/events/${editingEvent.id}` : '/api/events';
     const method = editingEvent ? 'PUT' : 'POST';
     await fetch(url, { method, credentials: 'include', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify(body) });
@@ -1037,6 +1152,7 @@ export default function CalendarPage() {
                                   className={`flex items-center gap-1 px-1 py-px rounded-sm text-[11px] cursor-pointer transition-colors hover:bg-accent ${CATEGORY_CONFIG[ev.category].bg}`}>
                                   <span className={`w-1 self-stretch rounded-sm shrink-0 ${CATEGORY_CONFIG[ev.category].sidebar}`} />
                                   <span className="truncate">{ev.title}{ev.duration ? <span className="text-muted-foreground ml-0.5">{ev.duration}h</span> : null}</span>
+                                  {ev.reminder_at && !ev.reminder_notified && <span className={`shrink-0 ${new Date(ev.reminder_at) <= new Date() ? 'text-red-500 animate-pulse' : 'text-muted-foreground/50'}`}><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5.25-2.5 8-2.5 8h19S19 14.25 19 9a7 7 0 0 0-7-7zm0 20a2.5 2.5 0 0 1-2.45-2h4.9A2.5 2.5 0 0 1 12 22z"/></svg></span>}
                                   <PriorityBadge priority={ev.priority} compact />
                                   {ev.task_id && <span className="text-[9px] text-violet-500 dark:text-violet-400 shrink-0">◆</span>}
                                   {ev.status === 'completed' && <span className="text-[10px] text-primary shrink-0 ml-auto">✓</span>}
@@ -1140,6 +1256,25 @@ export default function CalendarPage() {
                 <Label className="text-[11px] text-muted-foreground">消耗时长（小时）</Label>
                 <Input value={formDuration} onChange={e => setFormDuration(e.target.value)} className="h-9 mt-0.5" placeholder="可选，如 1.5" type="number" min="0" step="0.5" />
               </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] text-muted-foreground">提醒通知</Label>
+                  <button type="button" onClick={() => {
+                    const next = !formReminderEnabled;
+                    setFormReminderEnabled(next);
+                    if (next && !formReminderAt) {
+                      const d = new Date(Date.now() + 3600000);
+                      const pad = (n: number) => String(n).padStart(2, '0');
+                      setFormReminderAt(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+                    }
+                  }} className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${formReminderEnabled ? 'bg-[var(--work-dot)]' : 'bg-muted-foreground/30'}`}>
+                    <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${formReminderEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+                {formReminderEnabled && (
+                  <Input type="datetime-local" value={formReminderAt} onChange={e => setFormReminderAt(e.target.value)} className="h-9 mt-0.5 text-sm" step={60} />
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-[11px] text-muted-foreground">类别</Label>
@@ -1210,7 +1345,48 @@ export default function CalendarPage() {
           onAdd={() => { openNewEvent(dateListDate); }}
           onEditEvent={(ev) => { openEditEvent(ev); }} />
 
-        {/* ─── 日期设置弹窗 ─── */}
+        {/* ─── 提醒通知 ─── */}
+        {activeReminders.length > 0 && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={dismissAllReminders}>
+            <div className="bg-background border border-border rounded-lg shadow-2xl max-w-sm w-[90vw] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-4 pt-4 pb-2 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🔔</span>
+                  <h3 className="text-base font-semibold">{activeReminders.length} 条事项提醒</h3>
+                </div>
+              </div>
+              <div className="max-h-[40vh] overflow-y-auto px-4 py-2 space-y-2">
+                {activeReminders.map(r => (
+                  <div key={r.id} className="flex items-start gap-2 p-2 rounded border border-border bg-muted/30">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${r.category === 'work' ? 'bg-[var(--work-dot)]' : 'bg-[var(--life-dot)]'}`} />
+                        <span className="text-sm font-medium truncate">{r.title}</span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        {r.date} · {CATEGORY_CONFIG[r.category]?.label}{r.reminder_at ? ` · 提醒于 ${new Date(r.reminder_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={() => dismissReminder(r.id)}>知道了</Button>
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 py-3 border-t border-border flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">音效</span>
+                  <button type="button" onClick={() => {
+                    const next = !reminderSoundEnabled;
+                    setReminderSoundEnabled(next);
+                    localStorage.setItem('reminder-sound-enabled', String(next));
+                  }} className={`relative inline-flex h-3.5 w-6 items-center rounded-full transition-colors ${reminderSoundEnabled ? 'bg-[var(--work-dot)]' : 'bg-muted-foreground/30'}`}>
+                    <span className={`inline-block h-2.5 w-2.5 rounded-full bg-white transition-transform ${reminderSoundEnabled ? 'translate-x-3' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+                <Button size="sm" onClick={dismissAllReminders}>全部关闭</Button>
+              </div>
+            </div>
+          </div>
+        )}
         <Dialog open={dateSettingDialogOpen} onOpenChange={setDateSettingDialogOpen}>
           <DialogContent className="sm:max-w-[320px]">
             <DialogHeader>

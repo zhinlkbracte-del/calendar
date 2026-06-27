@@ -22,7 +22,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, date, category, status, priority, sort_order, task_id, duration } = body;
+    const { title, description, date, category, status, priority, sort_order, task_id, duration, reminder_at, reminder_notified } = body;
 
     const updateData: Record<string, unknown> = {};
     if (title !== undefined) updateData.title = title;
@@ -52,10 +52,29 @@ export async function PUT(
       if (duration !== null && duration !== '') {
         const dur = parseFloat(duration);
         if (isNaN(dur) || dur < 0) {
-          return NextResponse.json({ error: '消耗时长无效' }, { status: 400 });
+          return NextResponse.json({ error: '消耗时长无效，请输入非负数字' }, { status: 400 });
         }
       }
       updateData.duration = duration || null;
+    }
+    if (reminder_at !== undefined) {
+      if (reminder_at === null || reminder_at === '') {
+        updateData.reminder_at = null;
+        updateData.reminder_notified = false;
+      } else {
+        const reminderDate = new Date(reminder_at);
+        if (isNaN(reminderDate.getTime())) {
+          return NextResponse.json({ error: '提醒时间格式无效' }, { status: 400 });
+        }
+        updateData.reminder_at = reminderDate.toISOString();
+        // Reset notified if reminder time changed to future
+        if (reminderDate > new Date()) {
+          updateData.reminder_notified = false;
+        }
+      }
+    }
+    if (reminder_notified !== undefined) {
+      updateData.reminder_notified = reminder_notified;
     }
     updateData.updated_at = new Date().toISOString();
 
@@ -69,7 +88,7 @@ export async function PUT(
       .update(updateData)
       .eq('id', id)
       .eq('user_id', userId)
-      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, created_at, updated_at')
+      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, reminder_at, reminder_notified, created_at, updated_at')
       .maybeSingle();
 
     if (error) throw new Error(`更新失败: ${error.message}`);

@@ -10,7 +10,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Bot, Plus, Copy, Trash2, Eye, ExternalLink, Key, BookOpen } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Bot, Plus, Copy, Trash2, Eye, ExternalLink, Key, BookOpen, Download, Check, Link } from 'lucide-react';
 
 interface AgentConfig {
   id: string;
@@ -104,10 +105,16 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
 ${perms.events?.read ? `- GET /api/agent/events?month=YYYY-MM  查询指定月份事项
   参数：month（必填，格式 YYYY-MM，如 2026-06）` : ''}
 ${perms.events?.create ? `- POST /api/agent/events  创建事项
-  Body：{ "title": "事项标题（必填）", "date": "YYYY-MM-DD（必填）", "category": "work|life", "status": "not_started|in_progress|completed", "priority": "normal|important|urgent", "duration": "消耗时长（小时，可选）", "description": "描述（可选）", "task_id": "关联任务ID（可选）" }` : ''}
+  Body：{ "title": "事项标题（必填）", "date": "YYYY-MM-DD（必填）", "category": "work|life", "status": "not_started|in_progress|completed", "priority": "normal|important|urgent", "duration": "消耗时长（小时，可选）", "reminder_at": "提醒时间ISO8601（可选）", "description": "描述（可选）", "task_id": "关联任务ID（可选）" }` : ''}
 ${perms.events?.update ? `- PUT /api/agent/events/{id}  更新事项
-  Body：需更新的字段（同创建，均为可选）` : ''}
+  Body：需更新的字段（同创建，均为可选），另外 {"reminder_notified":true} 可关闭提醒` : ''}
 ${perms.events?.delete ? `- DELETE /api/agent/events/{id}  删除事项` : ''}
+
+### 提醒（Reminders）
+${perms.events?.read ? `- GET /api/agent/reminders  获取到期未通知的提醒（建议每15秒轮询）` : ''}
+${perms.events?.update ? `- POST /api/agent/reminders  关闭提醒
+  Body：{ "event_ids": ["id1","id2"] } 或 { "event_id": "id1" }
+  当用户回复"知道了"/"确认"/"收到"等知悉答复后调用` : ''}
 
 ### 任务（Tasks）
 ${perms.tasks?.read ? `- GET /api/agent/tasks  查询所有任务` : ''}
@@ -124,6 +131,7 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
 4. 状态 status 取值：not_started（未开始）、in_progress（进行中）、completed（已完成）
 5. 优先级 priority 取值：normal（普通）、important（重要）、urgent（紧急）
 6. 完整接口文档请访问：${docsUrl}
+7. 提醒功能：定期 GET /api/agent/reminders 检查到期提醒，用户确认后 POST /api/agent/reminders 关闭
 `.replace(/\n{3,}/g, '\n\n');
   };
 
@@ -305,38 +313,98 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                     </Button>
                   </div>
 
-                  {/* Permissions */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {(['events', 'tasks'] as const).map(group => (
-                      <div key={group} className="space-y-2">
-                        <div className="text-sm font-medium text-muted-foreground">
-                          {GROUP_LABELS[group]}
-                        </div>
-                        <div className="space-y-1.5">
-                          {Object.entries(PERMISSION_LABELS[group]).map(([action, label]) => (
-                            <div key={action} className="flex items-center justify-between">
-                              <span className="text-sm">{label}</span>
-                              <Switch
-                                checked={agent.permissions[group]?.[action as keyof typeof agent.permissions.events] ?? false}
-                                onCheckedChange={v => updatePermission(agent.id, group, action, v)}
-                              />
-                            </div>
-                          ))}
-                        </div>
+                  {/* Tabs: Skills / Permissions */}
+                  <Tabs defaultValue="skills" className="w-full">
+                    <TabsList className="w-full h-8">
+                      <TabsTrigger value="skills" className="flex-1 text-xs">Skills</TabsTrigger>
+                      <TabsTrigger value="permissions" className="flex-1 text-xs">权限</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="skills" className="mt-3 space-y-2">
+                      <p className="text-[11px] text-muted-foreground">复制链接发给 Agent，让它自行获取 Skill：</p>
+                      <p className="text-[11px] text-red-500 font-medium">⚠ skill里面已包含你的 API Key，切勿发送给他人！</p>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="flex-1 text-xs h-7" onClick={() => {
+                          navigator.clipboard.writeText(`${windowOrigin}/api/agent/skills?api_key=${agent.api_key}&platform=hermes`);
+                          setCopiedConfig('hermes-link');
+                          setTimeout(() => setCopiedConfig(null), 2000);
+                        }}>
+                          {copiedConfig === 'hermes-link' ? <Check className="w-3 h-3 mr-1 text-green-500" /> : <Link className="w-3 h-3 mr-1" />}
+                          {copiedConfig === 'hermes-link' ? '已复制' : 'Hermes skill 链接'}
+                        </Button>
+                        <Button variant="outline" size="sm" className="flex-1 text-xs h-7" onClick={() => {
+                          navigator.clipboard.writeText(`${windowOrigin}/api/agent/skills?api_key=${agent.api_key}&platform=openclaw`);
+                          setCopiedConfig('openclaw-link');
+                          setTimeout(() => setCopiedConfig(null), 2000);
+                        }}>
+                          {copiedConfig === 'openclaw-link' ? <Check className="w-3 h-3 mr-1 text-green-500" /> : <Link className="w-3 h-3 mr-1" />}
+                          {copiedConfig === 'openclaw-link' ? '已复制' : 'OpenClaw skill 链接'}
+                        </Button>
                       </div>
-                    ))}
-                  </div>
-
-                  {/* One-click copy config */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full mt-2"
-                    onClick={() => copyAgentConfig(agent)}
-                  >
-                    <Copy className="w-3.5 h-3.5 mr-1.5" />
-                    {copiedConfig === agent.api_key ? '已复制' : '一键复制配置给 Agent'}
-                  </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-xs h-7"
+                          onClick={() => {
+                            const url = `${windowOrigin}/api/agent/skills?api_key=${agent.api_key}&platform=hermes`;
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `schedule-hermes-skill.yaml`;
+                            a.click();
+                          }}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          下载 Hermes skill
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-xs h-7"
+                          onClick={() => {
+                            const url = `${windowOrigin}/api/agent/skills?api_key=${agent.api_key}&platform=openclaw`;
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `TOOLS.md`;
+                            a.click();
+                          }}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          下载 OpenClaw skill
+                        </Button>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => copyAgentConfig(agent)}
+                      >
+                        <Copy className="w-3.5 h-3.5 mr-1.5" />
+                        {copiedConfig === agent.api_key ? '已复制' : '一键复制配置给 Agent，自行构建 skills'}
+                      </Button>
+                    </TabsContent>
+                    <TabsContent value="permissions" className="mt-3">
+                      <div className="grid grid-cols-2 gap-4">
+                        {(['events', 'tasks'] as const).map(group => (
+                          <div key={group} className="space-y-2">
+                            <div className="text-sm font-medium text-muted-foreground">
+                              {GROUP_LABELS[group]}
+                            </div>
+                            <div className="space-y-1.5">
+                              {Object.entries(PERMISSION_LABELS[group]).map(([action, label]) => (
+                                <div key={action} className="flex items-center justify-between">
+                                  <span className="text-sm">{label}</span>
+                                  <Switch
+                                    checked={agent.permissions[group]?.[action as keyof typeof agent.permissions.events] ?? false}
+                                    onCheckedChange={v => updatePermission(agent.id, group, action, v)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </div>
               ))}
             </div>

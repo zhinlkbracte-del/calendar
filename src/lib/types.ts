@@ -10,6 +10,8 @@ export interface EventItem {
   task_id: string | null;
   task_title?: string;
   duration: string | null;
+  reminder_at: string | null;
+  reminder_notified: boolean;
   created_at: string;
   updated_at: string | null;
 }

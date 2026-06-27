@@ -29,12 +29,32 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     for (const field of allowedFields) {
       if (body[field] !== undefined) updates[field] = body[field];
     }
+    // Handle reminder_at
+    if (body.reminder_at !== undefined) {
+      if (body.reminder_at === null || body.reminder_at === '') {
+        updates.reminder_at = null;
+        updates.reminder_notified = false;
+      } else {
+        const reminderDate = new Date(body.reminder_at);
+        if (isNaN(reminderDate.getTime())) {
+          return NextResponse.json({ error: '提醒时间格式无效，应为ISO 8601格式' }, { status: 400 });
+        }
+        updates.reminder_at = reminderDate.toISOString();
+        if (reminderDate > new Date()) {
+          updates.reminder_notified = false;
+        }
+      }
+    }
+    // Handle reminder_notified (for agent dismissing reminders)
+    if (body.reminder_notified !== undefined) {
+      updates.reminder_notified = body.reminder_notified;
+    }
 
     const { data, error } = await supabase
       .from('events')
       .update(updates)
       .eq('id', id)
-      .select('id, title, description, date, category, status, priority, duration, updated_at')
+      .select('id, title, description, date, category, status, priority, duration, reminder_at, reminder_notified, updated_at')
       .single();
 
     if (error) {

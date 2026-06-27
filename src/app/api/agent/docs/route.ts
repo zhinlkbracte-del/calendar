@@ -84,6 +84,8 @@ GET /api/agent/events?month=YYYY-MM
       "sort_order": "0",
       "duration": "2.5",
       "task_id": null,
+      "reminder_at": "2026-06-15T09:00:00+08:00",
+      "reminder_notified": false,
       "created_at": "2026-06-01T10:00:00+08:00",
       "updated_at": "2026-06-01T10:00:00+08:00"
     }
@@ -123,6 +125,7 @@ POST /api/agent/events
 | priority | string | 否 | 优先级：normal（普通，默认）/ important（重要）/ urgent（紧急） |
 | description | string | 否 | 事项描述 |
 | duration | string | 否 | 消耗时长（小时），如"2.5" |
+| reminder_at | string | 否 | 提醒时间，ISO 8601格式，如"2026-06-15T09:00:00+08:00" |
 
 **响应**：返回创建的事项对象，HTTP 201
 
@@ -142,7 +145,18 @@ PUT /api/agent/events/{id}
 }
 \`\`\`
 
-**可更新字段**：title, description, date, category, status, priority, duration, task_id, sort_order
+**可更新字段**：title, description, date, category, status, priority, duration, task_id, sort_order, reminder_at
+
+**提醒相关字段**：
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| reminder_at | string\|null | 提醒时间，ISO 8601格式。设为null关闭提醒 |
+| reminder_notified | boolean | Agent关闭提醒时设为true |
+
+**关闭提醒示例**（用户向Agent确认后调用）：
+\`\`\`json
+{ "reminder_notified": true }
+\`\`\`
 
 **响应**：返回更新后的事项对象
 
@@ -158,6 +172,76 @@ DELETE /api/agent/events/{id}
 \`\`\`json
 { "success": true }
 \`\`\`
+
+---
+
+## 提醒（Reminders）API
+
+### 1. 获取到期提醒
+
+\`\`\`
+GET /api/agent/reminders
+\`\`\`
+
+**权限要求**：\`events.read\`
+
+获取当前用户所有已到期但未通知的提醒事项。Agent 应定期轮询此接口（建议每 15 秒），当有新提醒时主动通知用户。
+
+**响应示例**：
+\`\`\`json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "title": "项目评审会议",
+      "date": "2026-06-15",
+      "category": "work",
+      "status": "not_started",
+      "priority": "important",
+      "reminder_at": "2026-06-15T09:00:00+08:00",
+      "reminder_notified": false
+    }
+  ],
+  "total": 1
+}
+\`\`\`
+
+### 2. 关闭提醒
+
+\`\`\`
+POST /api/agent/reminders
+\`\`\`
+
+**权限要求**：\`events.update\`
+
+当用户向Agent确认已知悉提醒后，Agent调用此接口关闭提醒。
+
+**请求体**：
+\`\`\`json
+{
+  "event_ids": ["uuid1", "uuid2"]
+}
+\`\`\`
+
+或单个事项：
+\`\`\`json
+{
+  "event_id": "uuid1"
+}
+\`\`\`
+
+**响应**：
+\`\`\`json
+{ "success": true, "dismissed": 2 }
+\`\`\`
+
+### 提醒工作流
+
+1. Agent 每 15 秒调用 \`GET /api/agent/reminders\` 检查到期提醒
+2. 发现新提醒时，主动通知用户（如发送消息）
+3. 用户回复"知道了"/"确认"/"收到"等明确知悉的答复后
+4. Agent 调用 \`POST /api/agent/reminders\` 关闭提醒
+5. 用户的网页端也会同步关闭该提醒
 
 ---
 

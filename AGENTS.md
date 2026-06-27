@@ -15,6 +15,7 @@
 - 深色主题，现代国际风格，响应式布局
 - 用户账号系统：手机号+密码注册登录，数据按用户隔离
 - 个人设置：编辑昵称、裁剪上传头像、修改密码
+- 事项提醒：设定提醒时间，到期通知+音效+标签闪动，支持Agent推送
 
 ### 版本技术栈
 
@@ -47,6 +48,7 @@
 │   │   │   └── events/          # 事项 CRUD API
 │   │   │       ├── route.ts     # GET(按月查询) + POST(创建)
 │   │   │       ├── reorder/route.ts # POST(批量排序)
+│   │   │       ├── reminders/route.ts # GET(到期提醒) + POST(标记已通知)
 │   │   │       └── [id]/route.ts # PUT(更新) + DELETE(删除)
 │   │   ├── globals.css          # 全局样式(深色主题+Inter字体)
 │   │   ├── layout.tsx           # 根布局(dark class + AuthProvider)
@@ -95,6 +97,8 @@
 | priority | varchar(20) | urgent / important / normal (默认normal) |
 | sort_order | varchar(50) | 同日排序顺序(可选) |
 | duration | varchar(10) | 消耗时长(小时,可选) |
+| reminder_at | timestamptz | 提醒时间(可选) |
+| reminder_notified | boolean | 提醒是否已通知(默认false) |
 | user_id | varchar(36) | 所属用户ID(可选,兼容旧数据) |
 | created_at | timestamptz | 创建时间 |
 | updated_at | timestamptz | 更新时间 |
@@ -122,6 +126,8 @@
 | PUT | /api/events/[id] | 更新指定事项(仅本人) |
 | DELETE | /api/events/[id] | 删除指定事项(仅本人) |
 | POST | /api/events/reorder | 批量更新排序 |
+| GET | /api/events/reminders | 获取到期未通知的提醒 |
+| POST | /api/events/reminders | 批量标记提醒为已通知 |
 
 > 认证方式：HTTP-only Cookie (`token`)，JWT有效期7天
 

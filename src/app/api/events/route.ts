@@ -15,6 +15,8 @@ export interface EventItem {
   task_title?: string;
   duration: string | null;
   user_id: string | null;
+  reminder_at: string | null;
+  reminder_notified: boolean;
   created_at: string;
   updated_at: string | null;
 }
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     let query = client
       .from('events')
-      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, created_at, updated_at')
+      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, reminder_at, reminder_notified, created_at, updated_at')
       .eq('user_id', userId);
 
     if (yearMonth !== 'all') {
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, date, category, status, priority, sort_order, task_id, duration } = body;
+    const { title, description, date, category, status, priority, sort_order, task_id, duration, reminder_at } = body;
 
     if (!title || !date || !category) {
       return NextResponse.json({ error: '缺少必填字段：标题、日期、类别' }, { status: 400 });
@@ -121,6 +123,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate reminder_at
+    let reminderAtValue: string | null = null;
+    if (reminder_at) {
+      const reminderDate = new Date(reminder_at);
+      if (isNaN(reminderDate.getTime())) {
+        return NextResponse.json({ error: '提醒时间格式无效' }, { status: 400 });
+      }
+      reminderAtValue = reminderDate.toISOString();
+    }
+
     const client = getSupabaseClient();
     const { data, error } = await client
       .from('events')
@@ -134,9 +146,11 @@ export async function POST(request: NextRequest) {
         sort_order: sort_order || null,
         task_id: task_id || null,
         duration: duration || null,
+        reminder_at: reminderAtValue,
+        reminder_notified: false,
         user_id: userId,
       })
-      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, created_at, updated_at')
+      .select('id, title, description, date, category, status, priority, sort_order, task_id, duration, user_id, reminder_at, reminder_notified, created_at, updated_at')
       .maybeSingle();
 
     if (error) throw new Error(`创建失败: ${error.message}`);

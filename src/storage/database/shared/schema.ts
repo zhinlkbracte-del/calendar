@@ -24,13 +24,15 @@ export const events = pgTable("events", {
 	priority: varchar({ length: 20 }).default('normal').notNull(),
 	userId: varchar("user_id", { length: 36 }),
 	taskId: varchar("task_id", { length: 36 }),
+	reminderAt: timestamp("reminder_at", { withTimezone: true, mode: 'string' }),
+	reminderNotified: boolean("reminder_notified").default(false).notNull(),
 }, (table) => [
-	index("events_category_idx").using("btree", table.category.asc().nullsLast().op("text_ops")),
-	index("events_date_idx").using("btree", table.date.asc().nullsLast().op("text_ops")),
-	index("events_priority_idx").using("btree", table.priority.asc().nullsLast().op("text_ops")),
-	index("events_status_idx").using("btree", table.status.asc().nullsLast().op("text_ops")),
-	index("events_task_id_idx").using("btree", table.taskId.asc().nullsLast().op("text_ops")),
-	index("events_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
+index("events_category_idx").using("btree", table.category.asc().nullsLast().op("text_ops")),
+index("events_date_idx").using("btree", table.date.asc().nullsLast().op("text_ops")),
+index("events_priority_idx").using("btree", table.priority.asc().nullsLast().op("text_ops")),
+index("events_status_idx").using("btree", table.status.asc().nullsLast().op("text_ops")),
+index("events_task_id_idx").using("btree", table.taskId.asc().nullsLast().op("text_ops")),
+index("events_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
 ]);
 
 export const users = pgTable("users", {
@@ -42,8 +44,8 @@ export const users = pgTable("users", {
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
-	index("users_phone_idx").using("btree", table.phone.asc().nullsLast().op("text_ops")),
-	unique("users_phone_unique").on(table.phone),
+index("users_phone_idx").using("btree", table.phone.asc().nullsLast().op("text_ops")),
+unique("users_phone_unique").on(table.phone),
 ]);
 
 export const dateSettings = pgTable("date_settings", {
@@ -54,9 +56,9 @@ export const dateSettings = pgTable("date_settings", {
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
-	index("date_settings_date_idx").using("btree", table.date.asc().nullsLast().op("text_ops")),
-	index("date_settings_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
-	unique("date_settings_date_user_id_key").on(table.date, table.userId),
+index("date_settings_date_idx").using("btree", table.date.asc().nullsLast().op("text_ops")),
+index("date_settings_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
+unique("date_settings_date_user_id_key").on(table.date, table.userId),
 ]);
 
 export const tasks = pgTable("tasks", {
@@ -73,9 +75,9 @@ export const tasks = pgTable("tasks", {
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
-	index("tasks_status_idx").using("btree", table.status.asc().nullsLast().op("text_ops")),
-	index("tasks_urgency_type_idx").using("btree", table.urgencyType.asc().nullsLast().op("text_ops")),
-	index("tasks_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
+index("tasks_status_idx").using("btree", table.status.asc().nullsLast().op("text_ops")),
+index("tasks_urgency_type_idx").using("btree", table.urgencyType.asc().nullsLast().op("text_ops")),
+index("tasks_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
 ]);
 
 export const agentConfigs = pgTable("agent_configs", {
@@ -88,6 +90,6 @@ export const agentConfigs = pgTable("agent_configs", {
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
-	index("agent_configs_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
-	unique("agent_configs_api_key_unique").on(table.apiKey),
+index("agent_configs_user_id_idx").using("btree", table.userId.asc().nullsLast().op("text_ops")),
+unique("agent_configs_api_key_unique").on(table.apiKey),
 ]);
