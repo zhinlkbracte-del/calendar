@@ -68,6 +68,14 @@ async function pushToWebhooks(userId: string, reminders: { id: string; title: st
           }
         })
     );
+    // Mark reminders as notified after webhook push completes (success or failure)
+    const reminderIds = reminders.map(r => r.id);
+    if (reminderIds.length > 0) {
+      await supabase
+        .from('events')
+        .update({ reminder_notified: true })
+        .in('id', reminderIds);
+    }
   } catch {
     // Webhook push failed, silently ignore - frontend will still notify
   }
