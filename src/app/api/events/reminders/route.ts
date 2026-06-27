@@ -28,8 +28,14 @@ async function pushToWebhooks(userId: string, reminders: { id: string; title: st
 
     if (!agents || agents.length === 0) return;
 
+    const first = reminders[0];
     const payload = {
       type: 'reminder' as const,
+      title: first.title,
+      date: first.date,
+      category: first.category,
+      priority: first.priority,
+      reminder_at: first.reminder_at,
       reminders: reminders.map(r => ({
         event_id: r.id,
         title: r.title,
