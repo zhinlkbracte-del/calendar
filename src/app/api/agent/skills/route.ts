@@ -1,21 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyToken } from '@/lib/auth';
+import { getServiceRoleClient } from '../_lib';
 
 export async function GET(request: NextRequest) {
+  // Skills now require login - API key is fetched from user's agent config
+  const token = request.cookies.get('token')?.value || request.headers.get('Authorization')?.replace('Bearer ', '');
+  if (!token) return NextResponse.json({ error: '未登录' }, { status: 401 });
+  
+  const payload = verifyToken(token);
+  if (!payload) return NextResponse.json({ error: '登录已过期' }, { status: 401 });
+
   const { searchParams } = new URL(request.url);
   const platform = searchParams.get('platform') || 'hermes';
-  const apiKey = searchParams.get('api_key') || 'YOUR_API_KEY';
+  const agentId = searchParams.get('agent_id');
+  
+  if (!agentId) {
+    return NextResponse.json({ error: '缺少 agent_id 参数' }, { status: 400 });
+  }
+
   const host = request.headers.get('host') || 'localhost:5000';
   const protocol = request.headers.get('x-forwarded-proto') || 'https';
   const baseUrl = `${protocol}://${host}`;
 
+  // Fetch agent config to get API key (verify ownership)
+  const supabase = getServiceRoleClient();
+  const { data: agent, error } = await supabase
+    .from('agent_configs')
+    .select('id, api_key, webhook_url, user_id')
+    .eq('id', agentId)
+    .eq('user_id', payload.userId)
+    .single();
+
+  if (error || !agent) {
+    return NextResponse.json({ error: 'Agent 不存在或无权操作' }, { status: 403 });
+  }
+
+  const apiKey = agent.api_key;
+  const webhookUrl = agent.webhook_url;
+
   if (platform === 'hermes') {
-    return NextResponse.json(generateHermesSkill(baseUrl, apiKey), {
+    return NextResponse.json(generateHermesSkill(baseUrl, apiKey, webhookUrl), {
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
     });
   }
 
   if (platform === 'openclaw') {
-    const md = generateOpenClawSkill(baseUrl, apiKey);
+    const md = generateOpenClawSkill(baseUrl, apiKey, webhookUrl);
     return new NextResponse(md, {
       headers: {
         'Content-Type': 'text/markdown; charset=utf-8',
@@ -27,11 +57,11 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ error: 'Unsupported platform. Use hermes or openclaw.' }, { status: 400 });
 }
 
-function generateHermesSkill(baseUrl: string, apiKey: string) {
+function generateHermesSkill(baseUrl: string, apiKey: string, webhookUrl: string | null) {
   return {
     name: 'schedule-manager',
-    version: 1,
-    description: '日程管理助手：通过API操作用户的月历事项和工作任务，支持增删改查',
+    version: 2,
+    description: '日程管理助手：通过API操作用户的月历事项和工作任务，支持增删改查。提醒通知通过Webhook推送，无需轮询。',
     trigger: ['日程', '事项', '月历', '任务', '安排', '计划', '日历', 'schedule', 'event', 'task', 'calendar'],
     tools_required: ['http_request'],
     skills: [
@@ -41,7 +71,7 @@ function generateHermesSkill(baseUrl: string, apiKey: string) {
         steps: [
           `调用 GET ${baseUrl}/api/agent/events?month=YYYY-MM`,
           'Header: X-API-Key: YOUR_API_KEY',
-          '返回该月所有事项（含标题、日期、类别、状态、优先级、消耗时长等）',
+          '返回该月所有事项（含标题、日期、类别、状态、优先级、消耗时长、提醒时间等）',
         ],
       },
       {
@@ -106,23 +136,13 @@ function generateHermesSkill(baseUrl: string, apiKey: string) {
         ],
       },
       {
-        name: 'check-reminders',
-        description: '检查到期提醒，当有事项到达提醒时间时通知用户',
-        steps: [
-          `调用 GET ${baseUrl}/api/agent/reminders`,
-          'Header: X-API-Key: YOUR_API_KEY',
-          '返回所有已到期但未通知的提醒事项',
-          '主动通知用户有事项需要关注',
-        ],
-      },
-      {
         name: 'dismiss-reminder',
-        description: '关闭提醒（用户确认知悉后调用）',
+        description: '关闭提醒（当用户对提醒确认知悉后调用）',
         steps: [
           `调用 POST ${baseUrl}/api/agent/reminders`,
           'Header: X-API-Key: YOUR_API_KEY',
           'Body: {"event_ids":["id1","id2"]} 或 {"event_id":"id1"}',
-          '当用户回复"知道了"/"确认"/"收到"等知悉答复后调用此接口',
+          '当用户回复"知道了"/"确认"/"收到"等知悉答复后调用此接口关闭提醒',
         ],
       },
     ],
@@ -134,17 +154,88 @@ function generateHermesSkill(baseUrl: string, apiKey: string) {
       headers: {
         'X-API-Key': apiKey,
       },
+      ...(webhookUrl ? { webhook: { url: webhookUrl, mode: 'deliver-only' } } : {}),
     },
+    webhook: webhookUrl ? {
+      description: '提醒通知推送（Webhook deliver-only 模式，不走 LLM，不消耗 token）',
+      url: webhookUrl,
+      mode: 'deliver-only',
+      note: '当用户的事项到达提醒时间时，系统会主动 POST 到此 webhook URL，收到后直接渲染推送给用户即可，无需 LLM 处理。用户确认后调用 dismiss-reminder 关闭提醒。',
+      how_to_get_url: {
+        codex: '设置 → 通知 → Webhook → 添加端点 URL',
+        workbuddy: 'Claw Tab → Start Service → 复制全局 Webhook URL（格式 https://claw.codebuddy.cn/wb/xxx-uuid）',
+        hermes: 'Settings → Integrations → Webhook → Create Webhook → 复制 Endpoint URL',
+        openclaw: '项目设置 → 通知 → Webhook → 添加端点 → 复制 URL',
+        other: 'Coze 扣子：Bot 编辑页 → 触发器 → 添加 Webhook；Dify：应用 → 编排 → API 扩展 → Webhook；FastGPT：应用 → API 扩展 → Webhook 触发',
+        custom: '部署 HTTP 接口接收 POST 请求，如 https://your-server.com/webhook/schedule-reminder',
+      },
+    } : undefined,
   };
 }
 
-function generateOpenClawSkill(baseUrl: string, apiKey: string): string {
+function generateOpenClawSkill(baseUrl: string, apiKey: string, webhookUrl: string | null): string {
+  const webhookSection = webhookUrl ? `
+
+## 提醒推送（Webhook）
+
+本技能已配置 Webhook 掐送，提醒通知由服务端主动推送，**无需轮询，不走 LLM，不消耗 token**。
+
+- Webhook URL: \`${webhookUrl}\`
+- 模式: \`--deliver-only\`（收到 POST → 渲染模板 → 直接推送给用户）
+
+### 推送格式
+
+当事项到达提醒时间，系统会 POST 如下 JSON 到 webhook：
+
+\`\`\`json
+{
+  "type": "reminder",
+  "reminders": [
+    {
+      "event_id": "uuid",
+      "title": "事项标题",
+      "date": "2026-06-15",
+      "category": "work",
+      "priority": "urgent",
+      "reminder_at": "2026-06-15T09:00:00+08:00"
+    }
+  ],
+  "count": 1
+}
+\`\`\`
+
+### 收到推送后的操作
+
+1. 将 reminders 渲染为通知消息推送给用户（不经过 LLM）
+2. 用户回复"知道了"/"确认"/"收到"后，调用关闭提醒接口：
+
+\`\`\`bash
+curl -s -X POST \\
+  -H "X-API-Key: $SCHEDULE_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"event_ids":["uuid"]}' \\
+  "$SCHEDULE_BASE_URL/api/agent/reminders"
+\`\`\`
+
+### 如何获取 Webhook URL
+
+| 平台 | 获取方式 |
+|------|----------|
+| Codex | 设置 → 通知 → Webhook → 添加端点 URL |
+| WorkBuddy | Claw Tab → Start Service → 复制全局 Webhook URL（格式 https://claw.codebuddy.cn/wb/xxx-uuid） |
+| Hermes | Settings → Integrations → Webhook → Create Webhook → 复制 Endpoint URL |
+| OpenClaw | 项目设置 → 通知 → Webhook → 添加端点 → 复制 URL |
+| 其他 | Coze 扣子：Bot 编辑页 → 触发器 → 添加 Webhook；Dify：应用 → 编排 → API 扩展 → Webhook；FastGPT：应用 → API 扩展 → Webhook 触发 |
+| 自建服务 | 部署 HTTP 接口接收 POST 请求，如 https://your-server.com/webhook/schedule-reminder |
+` : '';
+
   return `---
 name: schedule-manager
 description: >
   日程管理助手：通过API操作用户的月历事项和工作任务，支持增删改查。
+  提醒通知通过Webhook推送（deliver-only模式），无需轮询，不消耗token。
   当用户提到日程、事项、月历、任务、安排、计划、日历等关键词时触发。
-version: 1.0.0
+version: 2.0.0
 author: Schedule App
 requires:
   - curl
@@ -177,7 +268,7 @@ curl -s -H "X-API-Key: $SCHEDULE_API_KEY" \\
   "$SCHEDULE_BASE_URL/api/agent/events?month=YYYY-MM"
 \`\`\`
 
-返回字段：id, title, description, date, category(work/life), status(not_started/in_progress/completed), priority(normal/important/urgent), duration, sort_order, created_at, updated_at
+返回字段：id, title, description, date, category(work/life), status(not_started/in_progress/completed), priority(normal/important/urgent), duration, sort_order, reminder_at, reminder_notified, created_at, updated_at
 
 ### 创建事项
 
@@ -206,7 +297,7 @@ curl -s -X PUT \\
   "$SCHEDULE_BASE_URL/api/agent/events/{id}"
 \`\`\`
 
-只需传需要更新的字段。
+只需传需要更新的字段。取消提醒：\`{"reminder_at": null}\`
 
 ### 删除事项
 
@@ -215,30 +306,6 @@ curl -s -X DELETE \\
   -H "X-API-Key: $SCHEDULE_API_KEY" \\
   "$SCHEDULE_BASE_URL/api/agent/events/{id}"
 \`\`\`
-
-### 设置提醒
-
-创建事项时可通过 reminder_at 字段设置提醒时间（ISO 8601格式）：
-
-\`\`\`bash
-curl -s -X POST \\
-  -H "X-API-Key: $SCHEDULE_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"title":"项目评审","date":"2026-06-15","category":"work","reminder_at":"2026-06-15T09:00:00+08:00"}' \\
-  "$SCHEDULE_BASE_URL/api/agent/events"
-\`\`\`
-
-也可通过更新事项设置提醒：
-
-\`\`\`bash
-curl -s -X PUT \\
-  -H "X-API-Key: $SCHEDULE_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"reminder_at":"2026-06-15T09:00:00+08:00"}' \\
-  "$SCHEDULE_BASE_URL/api/agent/events/{id}"
-\`\`\`
-
-取消提醒：\`{"reminder_at": null}\`
 
 ---
 
@@ -281,22 +348,9 @@ curl -s -X DELETE \\
 
 ---
 
-## 提醒通知操作
+## 提醒关闭
 
-### 检查到期提醒
-
-定期（建议每15秒）调用此接口检查是否有到期提醒：
-
-\`\`\`bash
-curl -s -H "X-API-Key: $SCHEDULE_API_KEY" \\
-  "$SCHEDULE_BASE_URL/api/agent/reminders"
-\`\`\`
-
-返回所有已到期但未通知的提醒事项。发现新提醒时，应主动通知用户。
-
-### 关闭提醒
-
-当用户回复"知道了"/"确认"/"收到"等知悉答复后，调用此接口关闭提醒：
+当用户对推送的提醒确认知悉后，调用此接口关闭提醒：
 
 \`\`\`bash
 curl -s -X POST \\
@@ -307,7 +361,7 @@ curl -s -X POST \\
 \`\`\`
 
 也可关闭单个提醒：\`{"event_id":"uuid1"}\`
-
+${webhookSection}
 ---
 
 ## 注意事项
@@ -317,5 +371,6 @@ curl -s -X POST \\
 3. 操作前先查询确认目标事项/任务的存在
 4. 删除操作不可逆，请确认后再执行
 5. 每个API Key有独立的权限控制，部分操作可能被禁止
+6. 提醒通知通过Webhook主动推送（deliver-only模式），无需轮询
 `;
 }

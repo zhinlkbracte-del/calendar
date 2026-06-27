@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const supabase = getServiceRoleClient();
     const { data, error } = await supabase
       .from('agent_configs')
-      .select('id, name, api_key, permissions, is_active, created_at, updated_at')
+      .select('id, name, api_key, permissions, is_active, webhook_url, created_at, updated_at')
       .eq('user_id', payload.userId)
       .order('created_at', { ascending: false });
 
@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const name = body.name || 'My Agent';
+    const webhookUrl = body.webhook_url || null;
     
     // Limit: max 5 agents per user
     const supabase = getServiceRoleClient();
@@ -62,9 +63,10 @@ export async function POST(request: NextRequest) {
         name,
         api_key: apiKey,
         permissions: body.permissions || defaultPermissions,
+        webhook_url: webhookUrl,
         is_active: true,
       })
-      .select('id, name, api_key, permissions, is_active, created_at')
+      .select('id, name, api_key, permissions, is_active, webhook_url, created_at')
       .single();
 
     if (error) {
@@ -88,7 +90,7 @@ export async function PUT(request: NextRequest) {
     if (!payload) return NextResponse.json({ error: '登录已过期' }, { status: 401 });
 
     const body = await request.json();
-    const { id, name, permissions, is_active } = body;
+    const { id, name, permissions, is_active, webhook_url } = body;
     
     if (!id) return NextResponse.json({ error: '缺少 Agent ID' }, { status: 400 });
 
@@ -109,12 +111,13 @@ export async function PUT(request: NextRequest) {
     if (name !== undefined) updates.name = name;
     if (permissions !== undefined) updates.permissions = permissions;
     if (is_active !== undefined) updates.is_active = is_active;
+    if (webhook_url !== undefined) updates.webhook_url = webhook_url;
 
     const { data, error } = await supabase
       .from('agent_configs')
       .update(updates)
       .eq('id', id)
-      .select('id, name, api_key, permissions, is_active, updated_at')
+      .select('id, name, api_key, permissions, is_active, webhook_url, updated_at')
       .single();
 
     if (error) {

@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Bot, Plus, Copy, Trash2, Eye, ExternalLink, Key, BookOpen, Download, Check, Link } from 'lucide-react';
+import { Bot, Plus, Copy, Trash2, Eye, ExternalLink, Key, BookOpen, Download, Check, Link, Webhook, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AgentConfig {
   id: string;
@@ -21,6 +21,7 @@ interface AgentConfig {
     events: { read: boolean; create: boolean; update: boolean; delete: boolean };
     tasks: { read: boolean; create: boolean; update: boolean; delete: boolean };
   };
+  webhook_url: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -57,6 +58,9 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [showNew, setShowNew] = useState(false);
+  const [editingWebhook, setEditingWebhook] = useState<string | null>(null);
+  const [webhookInput, setWebhookInput] = useState('');
+  const [showWebhookGuide, setShowWebhookGuide] = useState(false);
 
   const fetchAgents = useCallback(async () => {
     setLoading(true);
@@ -73,7 +77,7 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
 
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
 
-  const generateAgentConfig = (agent: { name: string; api_key: string; permissions: Record<string, Record<string, boolean>> }) => {
+  const generateAgentConfig = (agent: { name: string; api_key: string; permissions: Record<string, Record<string, boolean>>; webhook_url: string | null }) => {
     const baseUrl = docsUrl?.replace('/api/agent/docs', '') || windowOrigin;
     const perms = agent.permissions;
     const enabledPerms: string[] = [];
@@ -97,7 +101,31 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
 - Base URL：${baseUrl}
 - 认证方式：请求头添加 X-API-Key
 - API Key：${agent.api_key}
+- Webhook URL：${agent.webhook_url || '未配置'}
 - 接口文档：${docsUrl}
+
+## 提醒推送（Webhook）
+
+当事项到达提醒时间，系统会主动 POST 到配置的 Webhook URL（deliver-only 模式，不走 LLM，不消耗 token）：
+
+推送格式：
+{
+  "type": "reminder",
+  "reminders": [
+    { "event_id": "uuid", "title": "事项标题", "date": "YYYY-MM-DD", "category": "work|life", "priority": "normal|important|urgent", "reminder_at": "ISO8601" }
+  ],
+  "count": 1
+}
+
+收到推送后直接渲染通知给用户。用户确认后调用关闭提醒接口。
+
+### Webhook URL 获取方式
+- Codex：设置 → 通知 → Webhook → 添加端点 URL
+- WorkBuddy：Claw Tab → Start Service → 复制全局 Webhook URL（格式 https://claw.codebuddy.cn/wb/xxx-uuid）
+- Hermes：Settings → Integrations → Webhook → Create Webhook → 复制 Endpoint URL
+- OpenClaw：项目设置 → 通知 → Webhook → 添加端点 → 复制 URL
+- 其他平台：Coze（扣子）Bot 编辑页 → 触发器 → 添加 Webhook → 复制 URL；Dify 应用 → 编排 → API 扩展 → 添加 Webhook → 复制回调地址；FastGPT 应用 → API 扩展 → Webhook 触发 → 复制接口地址
+- 自建服务：部署 HTTP 接口接收 POST 请求，如 https://your-server.com/webhook/schedule-reminder
 
 ## 接口列表
 
@@ -111,7 +139,6 @@ ${perms.events?.update ? `- PUT /api/agent/events/{id}  更新事项
 ${perms.events?.delete ? `- DELETE /api/agent/events/{id}  删除事项` : ''}
 
 ### 提醒（Reminders）
-${perms.events?.read ? `- GET /api/agent/reminders  获取到期未通知的提醒（建议每15秒轮询）` : ''}
 ${perms.events?.update ? `- POST /api/agent/reminders  关闭提醒
   Body：{ "event_ids": ["id1","id2"] } 或 { "event_id": "id1" }
   当用户回复"知道了"/"确认"/"收到"等知悉答复后调用` : ''}
@@ -131,11 +158,11 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
 4. 状态 status 取值：not_started（未开始）、in_progress（进行中）、completed（已完成）
 5. 优先级 priority 取值：normal（普通）、important（重要）、urgent（紧急）
 6. 完整接口文档请访问：${docsUrl}
-7. 提醒功能：定期 GET /api/agent/reminders 检查到期提醒，用户确认后 POST /api/agent/reminders 关闭
+7. 提醒通知通过Webhook主动推送（deliver-only模式），无需轮询
 `.replace(/\n{3,}/g, '\n\n');
   };
 
-  const copyAgentConfig = (agent: { name: string; api_key: string; permissions: Record<string, Record<string, boolean>> }) => {
+  const copyAgentConfig = (agent: { name: string; api_key: string; permissions: Record<string, Record<string, boolean>>; webhook_url: string | null }) => {
     const config = generateAgentConfig(agent);
     navigator.clipboard.writeText(config).then(() => {
       setCopiedConfig(agent.api_key);
@@ -186,6 +213,19 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
     }
   };
 
+  const updateWebhookUrl = async (agentId: string) => {
+    const res = await fetch('/api/agent/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: agentId, webhook_url: webhookInput || null }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      setAgents(agents.map(a => a.id === agentId ? { ...a, webhook_url: webhookInput || null } : a));
+      setEditingWebhook(null);
+    }
+  };
+
   const toggleActive = async (agentId: string, isActive: boolean) => {
     const res = await fetch('/api/agent/config', {
       method: 'PUT',
@@ -228,9 +268,9 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
           {/* Quick Guide */}
           <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm text-muted-foreground space-y-1.5">
             <p className="font-medium text-foreground">如何接入你的 Agent</p>
-            <p>1. 点击「新建 Agent」创建凭证，勾选需要的权限</p>
-            <p>2. 点击 Agent 卡片上的「一键复制配置」按钮</p>
-            <p>3. 将复制的内容粘贴到你的 Agent 平台即可，Agent 会自动读取配置</p>
+            <p>1. 点击「新建 Agent」创建凭证，配置 Webhook URL（用于接收提醒推送）</p>
+            <p>2. 勾选需要的权限，下载或复制 Skill 给你的 Agent</p>
+            <p>3. 当事项到达提醒时间时，系统会自动推送到 Webhook（deliver-only 模式，不走 LLM）</p>
             <div className="flex items-center gap-1 text-xs pt-0.5">
               <span>完整接口文档：</span>
               <a href={docsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
@@ -313,6 +353,83 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                     </Button>
                   </div>
 
+                  {/* Webhook URL */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <Webhook className="w-3.5 h-3.5" />
+                      <span>Webhook URL（提醒推送地址）</span>
+                    </div>
+                    {editingWebhook === agent.id ? (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="https://your-agent-webhook.example.com/notify"
+                          value={webhookInput}
+                          onChange={e => setWebhookInput(e.target.value)}
+                          className="flex-1 text-xs h-8"
+                          onKeyDown={e => e.key === 'Enter' && updateWebhookUrl(agent.id)}
+                        />
+                        <Button size="sm" className="h-8 text-xs" onClick={() => updateWebhookUrl(agent.id)}>
+                          保存
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setEditingWebhook(null)}>
+                          取消
+                        </Button>
+                      </div>
+                    ) : (
+                      <div
+                        className="flex items-center gap-2 bg-muted/30 rounded-md px-3 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => { setEditingWebhook(agent.id); setWebhookInput(agent.webhook_url || ''); }}
+                      >
+                        <code className="text-xs font-mono flex-1 truncate text-muted-foreground">
+                          {agent.webhook_url || '未配置 - 点击设置'}
+                        </code>
+                        <Eye className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      </div>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      配置后，事项到达提醒时间将主动 POST 推送（deliver-only 模式，不走 LLM，不消耗 token）
+                    </p>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 mt-1"
+                      onClick={() => setShowWebhookGuide(!showWebhookGuide)}
+                    >
+                      <HelpCircle className="w-3 h-3" />
+                      {showWebhookGuide ? '收起获取教程' : '如何获取 Webhook URL？'}
+                      {showWebhookGuide ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                    {showWebhookGuide && (
+                      <div className="text-[10px] text-muted-foreground bg-muted/20 rounded-md p-2.5 space-y-2 border border-border/50">
+                        <p className="font-medium text-foreground">Webhook URL 获取方式</p>
+                        <div>
+                          <p className="font-medium">Codex</p>
+                          <p>设置 → 通知（Notifications）→ Webhook → 添加端点 URL</p>
+                        </div>
+                        <div>
+                          <p className="font-medium">WorkBuddy</p>
+                          <p>左侧 Claw Tab → Start Service → 等待状态为 Running → 复制全局 Webhook URL（格式 https://claw.codebuddy.cn/wb/xxx-uuid）</p>
+                        </div>
+                        <div>
+                          <p className="font-medium">Hermes</p>
+                          <p>Settings → Integrations → Webhook → Create Webhook → 复制 Endpoint URL</p>
+                        </div>
+                        <div>
+                          <p className="font-medium">OpenClaw</p>
+                          <p>项目设置 → 通知 → Webhook → 添加端点 → 复制 URL</p>
+                        </div>
+                        <div>
+                          <p className="font-medium">其他平台</p>
+                          <p>Coze（扣子）Bot 编辑页 → 触发器 → 添加 Webhook → 复制 URL；Dify 应用 → 编排 → API 扩展 → 添加 Webhook → 复制回调地址；FastGPT 应用 → API 扩展 → Webhook 触发 → 复制接口地址</p>
+                        </div>
+                        <div>
+                          <p className="font-medium">自建服务</p>
+                          <p>部署一个 HTTP 接口，接收 POST 请求即可，URL 格式如：https://your-server.com/webhook/schedule-reminder</p>
+                        </div>
+                        <p className="text-[10px] italic">提示：Webhook 推送为 deliver-only 模式，Agent 收到后直接渲染通知给用户，无需 LLM 处理，不消耗 token</p>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Tabs: Skills / Permissions */}
                   <Tabs defaultValue="skills" className="w-full">
                     <TabsList className="w-full h-8">
@@ -320,11 +437,12 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                       <TabsTrigger value="permissions" className="flex-1 text-xs">权限</TabsTrigger>
                     </TabsList>
                     <TabsContent value="skills" className="mt-3 space-y-2">
-                      <p className="text-[11px] text-muted-foreground">复制链接发给 Agent，让它自行获取 Skill：</p>
+                      <p className="text-[11px] text-muted-foreground">下载或复制 Skill 给你的 Agent，内含 API Key 和接口说明：</p>
                       <p className="text-[11px] text-red-500 font-medium">⚠ skill里面已包含你的 API Key，切勿发送给他人！</p>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" className="flex-1 text-xs h-7" onClick={() => {
-                          navigator.clipboard.writeText(`${windowOrigin}/api/agent/skills?api_key=${agent.api_key}&platform=hermes`);
+                          const url = `${windowOrigin}/api/agent/skills?agent_id=${agent.id}&platform=hermes`;
+                          navigator.clipboard.writeText(url);
                           setCopiedConfig('hermes-link');
                           setTimeout(() => setCopiedConfig(null), 2000);
                         }}>
@@ -332,7 +450,8 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                           {copiedConfig === 'hermes-link' ? '已复制' : 'Hermes skill 链接'}
                         </Button>
                         <Button variant="outline" size="sm" className="flex-1 text-xs h-7" onClick={() => {
-                          navigator.clipboard.writeText(`${windowOrigin}/api/agent/skills?api_key=${agent.api_key}&platform=openclaw`);
+                          const url = `${windowOrigin}/api/agent/skills?agent_id=${agent.id}&platform=openclaw`;
+                          navigator.clipboard.writeText(url);
                           setCopiedConfig('openclaw-link');
                           setTimeout(() => setCopiedConfig(null), 2000);
                         }}>
@@ -346,10 +465,10 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                           size="sm"
                           className="flex-1 text-xs h-7"
                           onClick={() => {
-                            const url = `${windowOrigin}/api/agent/skills?api_key=${agent.api_key}&platform=hermes`;
+                            const url = `${windowOrigin}/api/agent/skills?agent_id=${agent.id}&platform=hermes`;
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = `schedule-hermes-skill.yaml`;
+                            a.download = `schedule-hermes-skill.json`;
                             a.click();
                           }}
                         >
@@ -361,7 +480,7 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                           size="sm"
                           className="flex-1 text-xs h-7"
                           onClick={() => {
-                            const url = `${windowOrigin}/api/agent/skills?api_key=${agent.api_key}&platform=openclaw`;
+                            const url = `${windowOrigin}/api/agent/skills?agent_id=${agent.id}&platform=openclaw`;
                             const a = document.createElement('a');
                             a.href = url;
                             a.download = `TOOLS.md`;

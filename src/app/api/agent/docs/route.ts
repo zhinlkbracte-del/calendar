@@ -177,7 +177,36 @@ DELETE /api/agent/events/{id}
 
 ## 提醒（Reminders）API
 
-### 1. 获取到期提醒
+### Webhook 推送模式（推荐）
+
+当用户在应用中配置了 Webhook URL 后，系统会在事项到达提醒时间时主动 POST 推送到该 URL，使用 \`deliver-only\` 模式：
+
+- **不走 LLM，不消耗 token**
+- 收到 POST → 渲染通知模板 → 直接推送给用户
+
+**推送请求格式**：
+\`\`\`json
+{
+  "type": "reminder",
+  "reminders": [
+    {
+      "event_id": "uuid",
+      "title": "项目评审会议",
+      "date": "2026-06-15",
+      "category": "work",
+      "priority": "important",
+      "reminder_at": "2026-06-15T09:00:00+08:00"
+    }
+  ],
+  "count": 1
+}
+\`\`\`
+
+**收到推送后的操作**：
+1. 将 reminders 渲染为通知消息推送给用户（不经过 LLM 处理）
+2. 用户回复"知道了"/"确认"/"收到"后，调用关闭提醒接口
+
+### 1. 获取到期提醒（备用，无需轮询）
 
 \`\`\`
 GET /api/agent/reminders
@@ -185,7 +214,7 @@ GET /api/agent/reminders
 
 **权限要求**：\`events.read\`
 
-获取当前用户所有已到期但未通知的提醒事项。Agent 应定期轮询此接口（建议每 15 秒），当有新提醒时主动通知用户。
+获取当前用户所有已到期但未通知的提醒事项。此接口主要用于备用查询，如已配置 Webhook 推送则无需轮询。
 
 **响应示例**：
 \`\`\`json
@@ -237,11 +266,18 @@ POST /api/agent/reminders
 
 ### 提醒工作流
 
-1. Agent 每 15 秒调用 \`GET /api/agent/reminders\` 检查到期提醒
-2. 发现新提醒时，主动通知用户（如发送消息）
-3. 用户回复"知道了"/"确认"/"收到"等明确知悉的答复后
-4. Agent 调用 \`POST /api/agent/reminders\` 关闭提醒
-5. 用户的网页端也会同步关闭该提醒
+**Webhook 推送模式（推荐，零 token 消耗）**：
+1. 用户在应用中为 Agent 配置 Webhook URL
+2. 事项到达提醒时间时，系统主动 POST 到 Webhook URL
+3. Agent 收到推送，以 deliver-only 模式直接渲染通知给用户（不走 LLM）
+4. 用户回复"知道了"/"确认"/"收到"等明确知悉的答复后
+5. Agent 调用 \`POST /api/agent/reminders\` 关闭提醒
+6. 用户的网页端也会同步关闭该提醒
+
+**轮询模式（备用，消耗 token）**：
+1. Agent 定期调用 \`GET /api/agent/reminders\` 检查到期提醒
+2. 发现新提醒时，主动通知用户
+3. 用户确认后调用 \`POST /api/agent/reminders\` 关闭提醒
 
 ---
 
@@ -341,6 +377,66 @@ DELETE /api/agent/tasks/{id}
 **响应**：
 \`\`\`json
 { "success": true }
+\`\`\`
+
+---
+
+## Webhook 配置
+
+用户可在 Schedule 应用中为 Agent 配置 Webhook URL。配置后，系统在事项到达提醒时间时主动 POST 推送。
+
+**配置方式**：在 Schedule 应用的「Agent 推入管理」中设置 Webhook URL
+
+**推送特性**：
+- 使用 \`deliver-only\` 模式，Agent 收到后直接渲染推送，不走 LLM，不消耗 token
+- 推送超时 5 秒，失败不重试（网页端仍会正常提醒）
+- 用户关闭提醒后，网页端和 Agent 端同步关闭
+
+### 如何获取 Webhook URL
+
+#### Codex
+1. 打开 Codex 设置 → 通知（Notifications）
+2. 选择 Webhook 通知方式
+3. 添加端点 URL（即本服务提供的 Webhook 推送目标地址）
+
+#### WorkBuddy
+1. 打开 WorkBuddy 客户端，点击左侧 Claw Tab
+2. 确认 Claw Service Status 显示 Running（若为 Stopped 则点击 Start Service）
+3. 等待约 3 秒，页面下方自动显示全局 Webhook URL（格式 https://claw.codebuddy.cn/wb/xxx-uuid）
+4. 点击 Copy URL 复制
+
+#### Hermes
+1. 进入 Settings → Integrations
+2. 点击 Webhook → Create Webhook
+3. 复制 Endpoint URL
+
+#### OpenClaw
+1. 进入项目设置 → 通知
+2. 点击 Webhook → 添加端点
+3. 复制 URL
+
+#### 其他平台
+- **Coze（扣子）**：Bot 编辑页 → 触发器 → 添加 Webhook → 复制 URL
+- **Dify**：应用 → 编排 → API 扩展 → 添加 Webhook → 复制回调地址
+- **FastGPT**：应用 → API 扩展 → Webhook 触发 → 复制接口地址
+
+#### 自建服务
+部署一个 HTTP 接口，接收 POST 请求即可。示例（Node.js）：
+
+\`\`\`javascript
+const express = require('express');
+const app = express();
+app.use(express.json());
+
+app.post('/webhook/schedule-reminder', (req, res) => {
+  const { type, reminders, count } = req.body;
+  // type = "reminder"，reminders 为到期事项数组
+  // 在此渲染通知给用户，无需调用 LLM
+  console.log(\`收到 \${count} 条提醒\`);
+  res.sendStatus(200);
+});
+
+app.listen(3000);
 \`\`\`
 
 ---
