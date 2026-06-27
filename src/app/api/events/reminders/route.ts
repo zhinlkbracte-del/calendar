@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { verifyToken, getTokenFromRequest } from '@/lib/auth';
 import { getServiceRoleClient } from '@/app/api/agent/_lib';
+import { createHmac } from 'crypto';
 
 function getUserId(request: NextRequest): string | null {
   const token = getTokenFromRequest(request);
@@ -20,7 +21,7 @@ async function pushToWebhooks(userId: string, reminders: { id: string; title: st
     const supabase = getServiceRoleClient();
     const { data: agents } = await supabase
       .from('agent_configs')
-      .select('webhook_url, is_active')
+      .select('webhook_url, webhook_secret, is_active')
       .eq('user_id', userId)
       .eq('is_active', true)
       .not('webhook_url', 'is', null);
@@ -40,16 +41,26 @@ async function pushToWebhooks(userId: string, reminders: { id: string; title: st
       count: reminders.length,
     };
 
+    const bodyStr = JSON.stringify(payload);
+
     // Push to all active agent webhooks concurrently
     await Promise.allSettled(
       agents
-        .filter((a): a is { webhook_url: string; is_active: boolean } => typeof a.webhook_url === 'string' && a.webhook_url.length > 0)
+        .filter((a): a is { webhook_url: string; webhook_secret: string | null; is_active: boolean } => typeof a.webhook_url === 'string' && a.webhook_url.length > 0)
         .map(async (agent) => {
           try {
+            const headers: Record<string, string> = {
+              'Content-Type': 'application/json',
+            };
+            // Add HMAC-SHA256 signature if webhook_secret is configured
+            if (agent.webhook_secret) {
+              const signature = createHmac('sha256', agent.webhook_secret).update(bodyStr).digest('hex');
+              headers['X-Webhook-Signature'] = `sha256=${signature}`;
+            }
             await fetch(agent.webhook_url, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
+              headers,
+              body: bodyStr,
               signal: AbortSignal.timeout(5000), // 5s timeout
             });
           } catch {

@@ -185,6 +185,12 @@ DELETE /api/agent/events/{id}
 - 收到 POST → 渲染通知模板 → 直接推送给用户
 
 **推送请求格式**：
+
+请求头：
+- \`Content-Type: application/json\`
+- \`X-Webhook-Signature: sha256=<HMAC-SHA256签名>\`（仅当配置了 Webhook Secret 时包含）
+
+请求体：
 \`\`\`json
 {
   "type": "reminder",
@@ -200,6 +206,12 @@ DELETE /api/agent/events/{id}
   ],
   "count": 1
 }
+\`\`\`
+
+**签名验证**：如果配置了 Webhook Secret，推送请求会携带 \`X-Webhook-Signature\` 头，值为 \`sha256=\` + HMAC-SHA256(request_body, secret)。验证方法：
+\`\`\`
+signature = "sha256=" + HMAC-SHA256(request_body, webhook_secret).hex()
+compare(signature, X-Webhook-Signature header)
 \`\`\`
 
 **收到推送后的操作**：

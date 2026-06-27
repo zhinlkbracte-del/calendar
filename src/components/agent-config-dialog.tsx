@@ -22,6 +22,7 @@ interface AgentConfig {
     tasks: { read: boolean; create: boolean; update: boolean; delete: boolean };
   };
   webhook_url: string | null;
+  webhook_secret: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -60,6 +61,7 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
   const [showNew, setShowNew] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<string | null>(null);
   const [webhookInput, setWebhookInput] = useState('');
+  const [webhookSecretInput, setWebhookSecretInput] = useState('');
   const [showWebhookGuide, setShowWebhookGuide] = useState(false);
 
   const fetchAgents = useCallback(async () => {
@@ -77,7 +79,7 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
 
   const [copiedConfig, setCopiedConfig] = useState<string | null>(null);
 
-  const generateAgentConfig = (agent: { name: string; api_key: string; permissions: Record<string, Record<string, boolean>>; webhook_url: string | null }) => {
+  const generateAgentConfig = (agent: { name: string; api_key: string; permissions: Record<string, Record<string, boolean>>; webhook_url: string | null; webhook_secret: string | null }) => {
     const baseUrl = docsUrl?.replace('/api/agent/docs', '') || windowOrigin;
     const perms = agent.permissions;
     const enabledPerms: string[] = [];
@@ -102,6 +104,7 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
 - 认证方式：请求头添加 X-API-Key
 - API Key：${agent.api_key}
 - Webhook URL：${agent.webhook_url || '未配置'}
+- Webhook Secret：${agent.webhook_secret || '未配置（建议配置以启用 HMAC 签名验证）'}
 - 接口文档：${docsUrl}
 
 ## 提醒推送（Webhook）
@@ -116,6 +119,12 @@ export function AgentConfigDialog({ open, onOpenChange }: AgentConfigDialogProps
   ],
   "count": 1
 }
+
+请求头：
+- Content-Type: application/json
+- X-Webhook-Signature: sha256=<HMAC-SHA256签名>（仅当配置了 Webhook Secret 时包含）
+
+签名验证：使用 Webhook Secret 对请求 body 做 HMAC-SHA256，将结果与 X-Webhook-Signature 头中的值比对，即可验证请求来源真实性。
 
 收到推送后直接渲染通知给用户。用户确认后调用关闭提醒接口。
 
@@ -162,7 +171,7 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
 `.replace(/\n{3,}/g, '\n\n');
   };
 
-  const copyAgentConfig = (agent: { name: string; api_key: string; permissions: Record<string, Record<string, boolean>>; webhook_url: string | null }) => {
+  const copyAgentConfig = (agent: { name: string; api_key: string; permissions: Record<string, Record<string, boolean>>; webhook_url: string | null; webhook_secret: string | null }) => {
     const config = generateAgentConfig(agent);
     navigator.clipboard.writeText(config).then(() => {
       setCopiedConfig(agent.api_key);
@@ -217,11 +226,11 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
     const res = await fetch('/api/agent/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: agentId, webhook_url: webhookInput || null }),
+      body: JSON.stringify({ id: agentId, webhook_url: webhookInput || null, webhook_secret: webhookSecretInput || null }),
     });
     if (res.ok) {
       const json = await res.json();
-      setAgents(agents.map(a => a.id === agentId ? { ...a, webhook_url: webhookInput || null } : a));
+      setAgents(agents.map(a => a.id === agentId ? { ...a, webhook_url: webhookInput || null, webhook_secret: webhookSecretInput || null } : a));
       setEditingWebhook(null);
     }
   };
@@ -360,25 +369,34 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                       <span>Webhook URL（提醒推送地址）</span>
                     </div>
                     {editingWebhook === agent.id ? (
-                      <div className="flex gap-2">
+                      <div className="space-y-2">
                         <Input
                           placeholder="https://your-agent-webhook.example.com/notify"
                           value={webhookInput}
                           onChange={e => setWebhookInput(e.target.value)}
-                          className="flex-1 text-xs h-8"
+                          className="w-full text-xs h-8"
                           onKeyDown={e => e.key === 'Enter' && updateWebhookUrl(agent.id)}
                         />
-                        <Button size="sm" className="h-8 text-xs" onClick={() => updateWebhookUrl(agent.id)}>
-                          保存
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setEditingWebhook(null)}>
-                          取消
-                        </Button>
+                        <Input
+                          placeholder="Webhook Secret（可选，用于 HMAC-SHA256 签名验证）"
+                          value={webhookSecretInput}
+                          onChange={e => setWebhookSecretInput(e.target.value)}
+                          className="w-full text-xs h-8"
+                          onKeyDown={e => e.key === 'Enter' && updateWebhookUrl(agent.id)}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" className="h-8 text-xs" onClick={() => updateWebhookUrl(agent.id)}>
+                            保存
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setEditingWebhook(null)}>
+                            取消
+                          </Button>
+                        </div>
                       </div>
                     ) : (
                       <div
                         className="flex items-center gap-2 bg-muted/30 rounded-md px-3 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => { setEditingWebhook(agent.id); setWebhookInput(agent.webhook_url || ''); }}
+                        onClick={() => { setEditingWebhook(agent.id); setWebhookInput(agent.webhook_url || ''); setWebhookSecretInput(agent.webhook_secret || ''); }}
                       >
                         <code className="text-xs font-mono flex-1 truncate text-muted-foreground">
                           {agent.webhook_url || '未配置 - 点击设置'}
@@ -387,7 +405,7 @@ ${perms.tasks?.delete ? `- DELETE /api/agent/tasks/{id}  删除任务` : ''}
                       </div>
                     )}
                     <p className="text-[10px] text-muted-foreground">
-                      配置后，事项到达提醒时间将主动 POST 推送（deliver-only 模式，不走 LLM，不消耗 token）
+                      配置后，事项到达提醒时间将主动 POST 推送（deliver-only 模式，不走 LLM，不消耗 token）。配置 Secret 后，推送将携带 X-Webhook-Signature 头（HMAC-SHA256），对方可据此验证请求真实性。
                     </p>
                     <button
                       type="button"

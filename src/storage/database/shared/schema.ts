@@ -87,6 +87,7 @@ export const agentConfigs = pgTable("agent_configs", {
 	apiKey: varchar("api_key", { length: 64 }).notNull(),
 	permissions: jsonb().default({ events: { read: true, create: true, update: true, delete: true }, tasks: { read: true, create: true, update: true, delete: true } }).notNull(),
 	webhookUrl: varchar("webhook_url", { length: 500 }),
+	webhookSecret: varchar("webhook_secret", { length: 255 }),
 	isActive: boolean("is_active").default(true).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
