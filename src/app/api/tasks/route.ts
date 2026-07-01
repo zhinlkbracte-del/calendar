@@ -16,7 +16,7 @@ function getServiceClient() {
   const serviceRoleKey = getSupabaseServiceRoleKey();
   if (!serviceRoleKey) {
     // Fallback to regular client (may fail if RLS blocks access)
-    return getServiceClient();
+    return getSupabaseClient();
   }
   return createClient(url, serviceRoleKey, {
     db: { timeout: 60000 },

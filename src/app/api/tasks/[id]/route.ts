@@ -15,7 +15,7 @@ function getServiceClient() {
   const { url } = getSupabaseCredentials();
   const serviceRoleKey = getSupabaseServiceRoleKey();
   if (!serviceRoleKey) {
-    return getServiceClient();
+    return getSupabaseClient();
   }
   return createClient(url, serviceRoleKey, {
     db: { timeout: 60000 },
