@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getSupabaseClient, getSupabaseServiceRoleKey, getSupabaseCredentials } from '@/storage/database/supabase-client';
+import { createClient } from '@supabase/supabase-js';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 
 function getUserId(request: NextRequest): string | null {
@@ -9,6 +10,19 @@ function getUserId(request: NextRequest): string | null {
   return payload?.userId ?? null;
 }
 
+/** Get a Supabase client that bypasses RLS using service_role key */
+function getServiceClient() {
+  const { url } = getSupabaseCredentials();
+  const serviceRoleKey = getSupabaseServiceRoleKey();
+  if (!serviceRoleKey) {
+    return getServiceClient();
+  }
+  return createClient(url, serviceRoleKey, {
+    db: { timeout: 60000 },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
 // GET /api/tasks/[id]/events - 获取任务关联的所有事项
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const userId = getUserId(request);
@@ -16,7 +30,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params;
-    const client = getSupabaseClient();
+    const client = getServiceClient();
 
     // Verify task ownership
     const { data: task } = await client

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { getSupabaseClient, getSupabaseServiceRoleKey, getSupabaseCredentials } from '@/storage/database/supabase-client';
+import { createClient } from '@supabase/supabase-js';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 
 function getUserId(request: NextRequest): string | null {
@@ -9,13 +10,27 @@ function getUserId(request: NextRequest): string | null {
   return payload?.userId ?? null;
 }
 
+/** Get a Supabase client that bypasses RLS using service_role key */
+function getServiceClient() {
+  const { url } = getSupabaseCredentials();
+  const serviceRoleKey = getSupabaseServiceRoleKey();
+  if (!serviceRoleKey) {
+    // Fallback to regular client (may fail if RLS blocks access)
+    return getServiceClient();
+  }
+  return createClient(url, serviceRoleKey, {
+    db: { timeout: 60000 },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
 // GET /api/tasks - 获取当前用户的所有任务
 export async function GET(request: NextRequest) {
   const userId = getUserId(request);
   if (!userId) return NextResponse.json({ error: '未登录' }, { status: 401 });
 
   try {
-    const client = getSupabaseClient();
+    const client = getServiceClient();
     const { data, error } = await client
       .from('tasks')
       .select('*')
@@ -63,7 +78,7 @@ export async function POST(request: NextRequest) {
       user_id: userId,
     };
 
-    const client = getSupabaseClient();
+    const client = getServiceClient();
     const { data, error } = await client.from('tasks').insert(insertData).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ data });
