@@ -52,8 +52,15 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
       if (res.ok) {
         const json = await res.json();
         setTasks(json.data || []);
+      } else {
+        const err = await res.json().catch(() => ({ error: '查询失败' }));
+        console.error('[tasks] fetch error:', res.status, err);
+        setTasks([]);
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[tasks] fetch network error:', err);
+      setTasks([]);
+    }
     setLoading(false);
   }, [user]);
 
@@ -83,32 +90,49 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
       latest_progress: formProgress, urgency_type: formUrgencyType, status: formStatus,
     };
     try {
+      let res: Response;
       if (editingTask) {
-        await fetch(`/api/tasks/${editingTask.id}`, {
+        res = await fetch(`/api/tasks/${editingTask.id}`, {
           method: 'PUT', credentials: 'include', headers: authHeaders(),
           body: JSON.stringify(body),
         });
       } else {
-        await fetch('/api/tasks', {
+        res = await fetch('/api/tasks', {
           method: 'POST', credentials: 'include', headers: authHeaders(),
           body: JSON.stringify(body),
         });
       }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: '请求失败' }));
+        alert(err.error || '操作失败');
+        return;
+      }
       setDialogOpen(false);
       fetchTasks();
       onTasksChange?.();
-    } catch { /* ignore */ }
+    } catch (err) {
+      alert('网络错误，请重试');
+      console.error('[tasks] save error:', err);
+    }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      await fetch(`/api/tasks/${id}`, {
+      const res = await fetch(`/api/tasks/${id}`, {
         method: 'DELETE', credentials: 'include', headers: authHeaders(),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: '删除失败' }));
+        alert(err.error || '删除失败');
+        return;
+      }
       setDeleteConfirmId(null);
       fetchTasks();
       onTasksChange?.();
-    } catch { /* ignore */ }
+    } catch (err) {
+      alert('网络错误，请重试');
+      console.error('[tasks] delete error:', err);
+    }
   };
 
   const handleQuickStatus = async (task: TaskItem, newStatus: TaskStatus) => {
@@ -123,7 +147,9 @@ export default function TaskPanel({ onTasksChange }: { onTasksChange?: () => voi
       });
       fetchTasks();
       onTasksChange?.();
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('[tasks] quick status error:', err);
+    }
   };
 
   const toggleExpand = async (taskId: string) => {

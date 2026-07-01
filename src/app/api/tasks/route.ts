@@ -12,13 +12,13 @@ function getUserId(request: NextRequest): string | null {
 
 /** Get a Supabase client that bypasses RLS using service_role key */
 function getServiceClient() {
-  const { url } = getSupabaseCredentials();
+  const { url, anonKey } = getSupabaseCredentials();
   const serviceRoleKey = getSupabaseServiceRoleKey();
+  const useKey = serviceRoleKey || anonKey;
   if (!serviceRoleKey) {
-    // Fallback to regular client (may fail if RLS blocks access)
-    return getSupabaseClient();
+    console.warn('[tasks] COZE_SUPABASE_SERVICE_ROLE_KEY not available, falling back to anonKey. Ensure RLS is disabled on tables.');
   }
-  return createClient(url, serviceRoleKey, {
+  return createClient(url, useKey, {
     db: { timeout: 60000 },
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -38,7 +38,10 @@ export async function GET(request: NextRequest) {
       .order('status', { ascending: true })
       .order('planned_end_date', { ascending: true, nullsFirst: false });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error('[tasks] Query error:', error.message, error.code, error.details);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ data });
   } catch (err) {
     const message = err instanceof Error ? err.message : '未知错误';
@@ -80,7 +83,11 @@ export async function POST(request: NextRequest) {
 
     const client = getServiceClient();
     const { data, error } = await client.from('tasks').insert(insertData).select().single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      console.error('[tasks] Insert error:', error.message, error.code, error.details);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    console.log('[tasks] Insert success:', data?.id);
     return NextResponse.json({ data });
   } catch (err) {
     const message = err instanceof Error ? err.message : '未知错误';
